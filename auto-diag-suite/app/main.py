@@ -7,13 +7,32 @@ Escucha sólo en 127.0.0.1 por defecto. Ejecutar:
 from __future__ import annotations
 
 import asyncio
+import uuid
+from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from obdcore.obd2 import Obd2Client
+from obdcore.safety.backup import EcuBackup
+from obdcore.safety.guard import ZeroBrickError
+from obdcore.storage.db import Database
 from obdcore.transport import make_transport
+from obdcore.uds.services import UdsServices
 
 app = FastAPI(title="Auto-Diag Suite", version="0.1.0")
+
+# ---------------------------------------------------------------------------
+# Estado en memoria para sesiones activas y backups
+# ---------------------------------------------------------------------------
+
+# session_id (str uuid) -> {"db_id": int, "transport": str, "vin": str|None}
+_sessions: dict[str, dict] = {}
+
+# backup_id (str uuid) -> EcuBackup
+_backups: dict[str, EcuBackup] = {}
+
+_db = Database()
 
 
 def _client() -> Obd2Client:
@@ -67,3 +86,16 @@ async def ws_live(ws: WebSocket) -> None:
         pass
     finally:
         client.transport.close()
+
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import pathlib
+
+WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
+if WEB_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+@app.get("/", include_in_schema=False)
+def root():
+    return FileResponse(str(WEB_DIR / "index.html"))

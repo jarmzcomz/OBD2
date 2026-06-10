@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto-Diag Suite</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0B1220;
+      --surface: #131C2E;
+      --primary: #2563EB;
+      --text: #E5EAF2;
+      --muted: #7C8AA5;
+      --success: #22C55E;
+      --destructive: #EF4444;
+      --secondary: #0EA5E9;
+      --border: #1E2D45;
+      --radius: 8px;
+      --radius-card: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .header-brand span { font-size: 22px; }
+
+    /* ── Connection badge ── */
+    .conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid;
+      transition: all 0.3s;
+    }
+    .conn-badge.connected {
+      color: var(--success);
+      border-color: rgba(34,197,94,0.3);
+      background: rgba(34,197,94,0.08);
+    }
+    .conn-badge.disconnected {
+      color: var(--destructive);
+      border-color: rgba(239,68,68,0.3);
+      background: rgba(239,68,68,0.08);
+    }
+    .conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .conn-badge.connected .conn-dot { animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── Main layout ── */
+    .main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Gauges row ── */
+    .gauges-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .gauge-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 28px 20px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      transition: border-color 0.3s;
+    }
+    .gauge-card:hover { border-color: rgba(37,99,235,0.4); }
+
+    .gauge-svg { display: block; }
+
+    .gauge-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    .gauge-label {
+      text-align: center;
+    }
+    .gauge-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .gauge-unit {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* ── DTC Panel ── */
+    .dtc-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 24px 28px;
+    }
+
+    .dtc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .dtc-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .dtc-actions { display: flex; gap: 10px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      font-family: inherit;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+
+    .btn-danger {
+      background: rgba(239,68,68,0.15);
+      color: var(--destructive);
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+    .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.25); }
+
+    /* DTC table */
+    .dtc-table-wrap {
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .dtc-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .dtc-table th {
+      background: rgba(255,255,255,0.03);
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .dtc-table td {
+      padding: 12px 16px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(30,45,69,0.6);
+    }
+    .dtc-table tr:last-child td { border-bottom: none; }
+    .dtc-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+    .dtc-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--secondary);
+    }
+
+    .dtc-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(239,68,68,0.12);
+      color: var(--destructive);
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+
+    .dtc-empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .dtc-empty-icon { font-size: 28px; }
+
+    .dtc-loading {
+      text-align: center;
+      padding: 32px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .dtc-error {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.2);
+      color: var(--destructive);
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    /* Success toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      background: rgba(34,197,94,0.15);
+      border: 1px solid rgba(34,197,94,0.3);
+      color: var(--success);
+      font-size: 13px;
+      font-weight: 600;
+      animation: slideIn 0.25s ease;
+      z-index: 999;
+    }
+    @keyframes slideIn {
+      from { transform: translateY(16px); opacity: 0; }
+      to   { transform: translateY(0);   opacity: 1; }
+    }
+
+    /* Responsive */
+    @media (max-width: 700px) {
+      .gauges-row { grid-template-columns: 1fr; }
+      .header { padding: 14px 16px; }
+      .main { padding: 20px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <script type="text/javascript">
+  (function() {
+    'use strict';
+
+    var h = React.createElement;
+
+    /* ─────────────────────────────────────────
+       ConnectionStatus
+    ───────────────────────────────────────── */
+    function ConnectionStatus(props) {
+      var connected = props.connected;
+      return h('div', {
+        className: 'conn-badge ' + (connected ? 'connected' : 'disconnected')
+      },
+        h('div', { className: 'conn-dot' }),
+        connected ? 'Conectado' : 'Desconectado'
+      );
+    }
+
+    /* ─────────────────────────────────────────
+       GaugeDial
+       props: label, unit, value, min, max, warn
+    ───────────────────────────────────────── */
+    function GaugeDial(props) {
+      var label = props.label;
+      var unit  = props.unit;
+      var value = props.value != null ? props.value : 0;
+      var min   = props.min != null ? props.min : 0;
+      var max   = props.max != null ? props.max : 100;
+      var warn  = props.warn;        // threshold for red color
+
+      var SIZE   = 160;
+      var CX     = SIZE / 2;
+      var CY     = SIZE / 2;
+      var R      = 60;
+      // Arc spans 240 degrees (from 150° to 30°, going clockwise)
+      var ARC_DEG = 240;
+      var circumference = 2 * Math.PI * R;
+      var arcLength = (ARC_DEG / 360) * circumference;
+
+      var pct = Math.min(1, Math.max(0, (value - min) / (max - min)));
+      var filled = pct * arcLength;
+
+      // Convert degrees to radians, offset so 0% = bottom-left (150° from top)
+      var startAngle = 150; // degrees from 12 o'clock
+      var endAngle   = 150 + ARC_DEG;
+
+      function polarToXY(angleDeg, r) {
+        var rad = (angleDeg - 90) * Math.PI / 180;
+        return {
+          x: CX + r * Math.cos(rad),
+          y: CY + r * Math.sin(rad)
+        };
+      }
+
+      function describeArc(startDeg, sweepDeg, r) {
+        var start = polarToXY(startDeg, r);
+        var end   = polarToXY(startDeg + sweepDeg, r);
+        var largeArc = sweepDeg > 180 ? 1 : 0;
+        return [
+          'M', start.x, start.y,
+          'A', r, r, 0, largeArc, 1, end.x, end.y
+        ].join(' ');
+      }
+
+      var isHigh = warn != null && value > warn;
+      var activeColor = isHigh ? '#EF4444' : '#2563EB';
+      var glowColor   = isHigh ? 'rgba(239,68,68,0.35)' : 'rgba(37,99,235,0.35)';
+
+      // Format display value
+      var displayVal = Number.isFinite(value) ? Math.round(value) : '--';
+
+      var filterId = 'glow-' + label.replace(/\s+/g, '');
+
+      return h('div', { className: 'gauge-card' },
+        h('svg', {
+          className: 'gauge-svg',
+          width: SIZE,
+          height: SIZE,
+          viewBox: '0 0 ' + SIZE + ' ' + SIZE
+        },
+          h('defs', null,
+            h('filter', { id: filterId, x: '-30%', y: '-30%', width: '160%', height: '160%' },
+              h('feGaussianBlur', { stdDeviation: '3', result: 'blur' }),
+              h('feFlood', { 'flood-color': glowColor, result: 'color' }),
+              h('feComposite', { in: 'color', in2: 'blur', operator: 'in', result: 'shadow' }),
+              h('feMerge', null,
+                h('feMergeNode', { in: 'shadow' }),
+                h('feMergeNode', { in: 'SourceGraphic' })
+              )
+            )
+          ),
+
+          // Background track arc
+          h('path', {
+            d: describeArc(startAngle, ARC_DEG, R),
+            fill: 'none',
+            stroke: '#1E2D45',
+            strokeWidth: 10,
+            strokeLinecap: 'round'
+          }),
+
+          // Filled arc (progress) — drawn as a dashed stroke trick
+          pct > 0 && h('path', {
+            d: describeArc(startAngle, ARC_DEG, R),
+            fill: 'none',
+            stroke: activeColor,
+            strokeWidth: 10,
+            strokeLinecap: 'round',
+            strokeDasharray: arcLength,
+            strokeDashoffset: arcLength - filled,
+            filter: 'url(#' + filterId + ')',
+            style: { transition: 'stroke-dashoffset 0.4s ease, stroke 0.4s ease' }
+          }),
+
+          // Tick mark at current position
+          pct > 0 && (function() {
+            var tickAngle = startAngle + pct * ARC_DEG;
+            var outer = polarToXY(tickAngle, R + 8);
+            var inner = polarToXY(tickAngle, R - 8);
+            return h('line', {
+              x1: inner.x, y1: inner.y,
+              x2: outer.x, y2: outer.y,
+              stroke: activeColor,
+              strokeWidth: 3,
+              strokeLinecap: 'round'
+            });
+          })(),
+
+          // Center value
+          h('text', {
+            x: CX,
+            y: CY + 6,
+            textAnchor: 'middle',
+            dominantBaseline: 'middle',
+            fill: isHigh ? '#EF4444' : '#E5EAF2',
+            fontSize: 26,
+            fontWeight: 700,
+            fontFamily: "'JetBrains Mono', monospace",
+            style: { transition: 'fill 0.4s ease' }
+          }, displayVal)
+        ),
+
+        h('div', { className: 'gauge-label' },
+          h('div', { className: 'gauge-name' }, label),
+          h('div', { className: 'gauge-unit' }, unit)
+        )
+      );
+    }
+
+    /* ─────────────────────────────────────────
+       Dashboard — 3 gauges via WebSocket
+    ───────────────────────────────────────── */
+    function Dashboard(props) {
+      var onConnectionChange = props.onConnectionChange;
+
+      var initialPids = { rpm: 0, speed: 0, coolant_temp: 0 };
+      var pidState = React.useState(initialPids);
+      var pids = pidState[0];
+      var setPids = pidState[1];
+
+      var connState = React.useState(false);
+      var connected = connState[0];
+      var setConnected = connState[1];
+
+      React.useEffect(function() {
+        var ws;
+        var reconnectTimer;
+        var dead = false;
+
+        function connect() {
+          if (dead) return;
+          try {
+            ws = new WebSocket('ws://127.0.0.1:8000/ws/live');
+          } catch(e) {
+            scheduleReconnect();
+            return;
+          }
+
+          ws.onopen = function() {
+            setConnected(true);
+            if (onConnectionChange) onConnectionChange(true);
+          };
+
+          ws.onmessage = function(event) {
+            try {
+              var data = JSON.parse(event.data);
+              setPids(function(prev) {
+                return Object.assign({}, prev, data);
+              });
+            } catch(e) { /* ignore parse errors */ }
+          };
+
+          ws.onclose = function() {
+            setConnected(false);
+            if (onConnectionChange) onConnectionChange(false);
+            scheduleReconnect();
+          };
+
+          ws.onerror = function() {
+            setConnected(false);
+            if (onConnectionChange) onConnectionChange(false);
+          };
+        }
+
+        function scheduleReconnect() {
+          if (dead) return;
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+
+        connect();
+
+        return function() {
+          dead = true;
+          clearTimeout(reconnectTimer);
+          if (ws) ws.close();
+        };
+      }, []);
+
+      return h('div', null,
+        h('div', { className: 'section-label' }, 'Telemetría en tiempo real'),
+        h('div', { className: 'gauges-row' },
+          h(GaugeDial, {
+            label: 'RPM',
+            unit: 'rev/min',
+            value: pids.rpm,
+            min: 0,
+            max: 6000,
+            warn: 4000
+          }),
+          h(GaugeDial, {
+            label: 'Velocidad',
+            unit: 'km/h',
+            value: pids.speed,
+            min: 0,
+            max: 220,
+            warn: null
+          }),
+          h(GaugeDial, {
+            label: 'Temp. Motor',
+            unit: '°C',
+            value: pids.coolant_temp,
+            min: 0,
+            max: 120,
+            warn: 95
+          })
+        )
+      );
+    }
+
+    /* ─────────────────────────────────────────
+       DTCPanel
+    ───────────────────────────────────────── */
+    function DTCPanel() {
+      var dtcState = React.useState(null);   // null = not loaded yet
+      var dtcs = dtcState[0];
+      var setDtcs = dtcState[1];
+
+      var loadingState = React.useState(false);
+      var loading = loadingState[0];
+      var setLoading = loadingState[1];
+
+      var errorState = React.useState(null);
+      var error = errorState[0];
+      var setError = errorState[1];
+
+      var toastState = React.useState(null);
+      var toast = toastState[0];
+      var setToast = toastState[1];
+
+      function showToast(msg) {
+        setToast(msg);
+        setTimeout(function() { setToast(null); }, 3000);
+      }
+
+      function readDtcs() {
+        setLoading(true);
+        setError(null);
+        fetch('http://127.0.0.1:8000/dtc')
+          .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function(data) {
+            setDtcs(data.dtcs || []);
+            setLoading(false);
+          })
+          .catch(function(e) {
+            setError('Error al leer DTCs: ' + e.message);
+            setLoading(false);
+          });
+      }
+
+      function clearDtcs() {
+        var ok = window.confirm('¿Seguro que deseas borrar todos los códigos de falla (DTCs)? Esta acción no se puede deshacer.');
+        if (!ok) return;
+
+        setLoading(true);
+        setError(null);
+        fetch('http://127.0.0.1:8000/dtc', { method: 'DELETE' })
+          .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function(data) {
+            if (data.cleared) {
+              setDtcs([]);
+              showToast('Códigos de falla borrados correctamente');
+            }
+            setLoading(false);
+          })
+          .catch(function(e) {
+            setError('Error al borrar DTCs: ' + e.message);
+            setLoading(false);
+          });
+      }
+
+      // Render DTC body
+      var body;
+      if (dtcs === null) {
+        body = h('div', { className: 'dtc-empty' },
+          h('div', { className: 'dtc-empty-icon' }, '📋'),
+          'Presiona "Leer DTCs" para obtener los códigos almacenados'
+        );
+      } else if (loading) {
+        body = h('div', { className: 'dtc-loading' }, 'Consultando módulo ECU…');
+      } else if (dtcs.length === 0) {
+        body = h('div', { className: 'dtc-empty' },
+          h('div', { className: 'dtc-empty-icon' }, '✅'),
+          'Sin códigos de falla'
+        );
+      } else {
+        body = h('div', { className: 'dtc-table-wrap' },
+          h('table', { className: 'dtc-table' },
+            h('thead', null,
+              h('tr', null,
+                h('th', null, 'Código'),
+                h('th', null, 'Estado')
+              )
+            ),
+            h('tbody', null,
+              dtcs.map(function(code) {
+                return h('tr', { key: code },
+                  h('td', null, h('span', { className: 'dtc-code' }, code)),
+                  h('td', null, h('span', { className: 'dtc-badge' }, '● Activo'))
+                );
+              })
+            )
+          )
+        );
+      }
+
+      return h('div', null,
+        h('div', { className: 'dtc-card' },
+          h('div', { className: 'dtc-header' },
+            h('div', { className: 'dtc-title' }, 'Códigos de Falla (DTC)'),
+            h('div', { className: 'dtc-actions' },
+              h('button', {
+                className: 'btn btn-primary',
+                onClick: readDtcs,
+                disabled: loading
+              }, loading ? 'Leyendo…' : '🔍 Leer DTCs'),
+              h('button', {
+                className: 'btn btn-danger',
+                onClick: clearDtcs,
+                disabled: loading || dtcs === null
+              }, '🗑 Borrar DTCs')
+            )
+          ),
+          body,
+          error && h('div', { className: 'dtc-error' }, error)
+        ),
+
+        toast && h('div', { className: 'toast' }, '✓ ' + toast)
+      );
+    }
+
+    /* ─────────────────────────────────────────
+       App root
+    ───────────────────────────────────────── */
+    function App() {
+      var connState = React.useState(false);
+      var connected = connState[0];
+      var setConnected = connState[1];
+
+      return h('div', null,
+        // Header
+        h('header', { className: 'header' },
+          h('div', { className: 'header-brand' },
+            h('span', null, '🔧'),
+            'Auto-Diag Suite'
+          ),
+          h(ConnectionStatus, { connected: connected })
+        ),
+
+        // Main content
+        h('main', { className: 'main' },
+          h(Dashboard, { onConnectionChange: setConnected }),
+          h(DTCPanel, null)
+        )
+      );
+    }
+
+    /* ─────────────────────────────────────────
+       Mount
+    ───────────────────────────────────────── */
+    var root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(h(App, null));
+
+  })();
+  </script>
+</body>
+</html>

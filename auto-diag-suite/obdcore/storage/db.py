@@ -77,3 +77,33 @@ class Database:
                 "INSERT INTO dtc_record(session_id, code, status) VALUES(?,?,?)",
                 [(session_id, c, "stored") for c in codes],
             )
+
+    def save_backup(
+        self,
+        session_id: int,
+        ecu_addr: str,
+        did_or_region: str,
+        data: bytes,
+        sha256: str,
+    ) -> int:
+        """Persiste un respaldo de ECU en la tabla ``ecu_backup``.
+
+        Args:
+            session_id: sesión activa a la que pertenece el respaldo.
+            ecu_addr: dirección de la ECU (p.ej. ``"0x7E0"``).
+            did_or_region: identificador del DID o región respaldada.
+            data: bytes del respaldo.
+            sha256: hash SHA-256 del respaldo (hex string).
+
+        Returns:
+            El ``id`` de la fila insertada.
+        """
+        created_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+        with self.connect() as con:
+            cur = con.execute(
+                "INSERT INTO ecu_backup"
+                "(session_id, ecu_addr, did_or_region, data, sha256, created_at)"
+                " VALUES(?,?,?,?,?,?)",
+                (session_id, ecu_addr, did_or_region, data, sha256, created_at),
+            )
+            return cur.lastrowid
