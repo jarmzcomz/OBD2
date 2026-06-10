@@ -7,10 +7,13 @@ Escucha sólo en 127.0.0.1 por defecto. Ejecutar:
 from __future__ import annotations
 
 import asyncio
+import pathlib
 import uuid
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from obdcore.obd2 import Obd2Client
@@ -246,10 +249,6 @@ def session_uds_write(session_id: str, body: UdsWriteBody) -> dict:
 
     return {"ok": ok}
 
-
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import pathlib
 
 WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
 if WEB_DIR.exists():

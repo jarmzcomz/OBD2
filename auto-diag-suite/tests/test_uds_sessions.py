@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 
-from obdcore.uds.sessions import DiagnosticSession, SessionManager, UdsSessionError
+from obdcore.uds.sessions import DiagnosticSession, SessionManager
 
 
 # ---------------------------------------------------------------------------
