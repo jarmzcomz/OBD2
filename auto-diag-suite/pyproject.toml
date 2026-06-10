@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "auto-diag-suite"
+version = "0.1.0"
+description = "Herramienta local de diagnóstico automotriz (OBD-II / CAN / UDS) para taller y vehículo propio."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+]
+
+[project.optional-dependencies]
+# Backends de hardware reales. El núcleo y los tests funcionan SIN estos (modo sim).
+hardware = [
+    "python-can>=4.3",
+    "udsoncan>=1.21",
+    "can-isotp>=2.0",
+    "cantools>=39",
+    "pyserial>=3.5",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+autodiag = "obdcore.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["obdcore", "app"]
+
+[tool.ruff]
+line-length = 100
