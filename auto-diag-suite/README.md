@@ -1,6 +1,6 @@
 # Auto-Diag Suite
 
-[![CI](https://github.com/jarm-com/OBD2/actions/workflows/ci.yml/badge.svg)](https://github.com/jarm-com/OBD2/actions/workflows/ci.yml)
+[![CI](https://github.com/jarmzcomz/OBD2/actions/workflows/ci.yml/badge.svg)](https://github.com/jarmzcomz/OBD2/actions/workflows/ci.yml)
 
 Herramienta **local** de diagnóstico automotriz (OBD-II / CAN / UDS) para taller y vehículo
 propio. Núcleo Python reutilizable + dashboard web local. Android queda planificado como Fase 2.
