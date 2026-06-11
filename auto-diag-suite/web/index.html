@@ -1407,6 +1407,76 @@
               }),
           h('div', { style: { fontSize: '12px', color: '#7C8AA5', marginTop: '12px' } },
             'Para aplicar un cambio: ve a UDS Console → crea sesión → toma backup → escribe el long coding modificado.')
+        ),
+
+        /* Bit Finder: cálculo empírico del bit exacto */
+        h(BitFinder, null)
+      );
+    }
+
+    /* ═══════════════════════════════════════════
+       BIT FINDER — calcula el byte/bit exacto por comparación
+    ═══════════════════════════════════════════ */
+    function BitFinder() {
+      var beforeArr = React.useState('');
+      var before = beforeArr[0], setBefore = beforeArr[1];
+      var afterArr = React.useState('');
+      var after = afterArr[0], setAfter = afterArr[1];
+      var resArr = React.useState(null);
+      var res = resArr[0], setRes = resArr[1];
+      var errArr = React.useState('');
+      var err = errArr[0], setErr = errArr[1];
+
+      function compute() {
+        setErr(''); setRes(null);
+        fetch('http://127.0.0.1:8000/vag/bitfinder', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ before_hex: before, after_hex: after })
+        })
+          .then(function(r) { if (!r.ok) return r.json().then(function(e){ throw new Error(e.detail || 'error'); }); return r.json(); })
+          .then(function(d) { setRes(d); })
+          .catch(function(e) { setErr(e.message); });
+      }
+
+      return h('div', { className: 'card' },
+        h('div', { className: 'card-title' }, '🎯 Bit Finder — calcula el bit exacto'),
+        h('p', { style: { color: '#7C8AA5', fontSize: '13px', lineHeight: '1.5', margin: '8px 0' } },
+          'Lee el long coding ', h('strong', null, 'antes'), ' de cambiar la función, cámbiala por el ',
+          'método normal del coche, lee el coding ', h('strong', null, 'después'),
+          ', y pega ambos aquí. Te dirá el byte/bit exacto que cambió.'
+        ),
+        h('div', { style: { marginBottom: '10px' } },
+          h('label', { style: { fontSize: '12px', color: '#7C8AA5' } }, 'Coding ANTES (hex)'),
+          h('input', {
+            className: 'input', value: before, placeholder: '00 04 12 80',
+            style: { fontFamily: 'JetBrains Mono, monospace' },
+            onChange: function(e) { setBefore(e.target.value); }
+          })
+        ),
+        h('div', { style: { marginBottom: '10px' } },
+          h('label', { style: { fontSize: '12px', color: '#7C8AA5' } }, 'Coding DESPUÉS (hex)'),
+          h('input', {
+            className: 'input', value: after, placeholder: '01 04 12 80',
+            style: { fontFamily: 'JetBrains Mono, monospace' },
+            onChange: function(e) { setAfter(e.target.value); }
+          })
+        ),
+        h('button', { className: 'btn btn-primary', onClick: compute }, 'Calcular bits'),
+        err && h('div', { style: { color: '#EF4444', marginTop: '10px', fontSize: '13px' } }, '⚠ ' + err),
+        res && h('div', { style: { marginTop: '12px' } },
+          res.count === 0
+            ? h('div', { style: { color: '#7C8AA5', fontSize: '13px' } }, 'No cambió ningún bit entre los dos codings.')
+            : h('div', null,
+                h('div', { style: { fontSize: '13px', color: '#22C55E', marginBottom: '8px' } },
+                  '✓ ' + res.count + ' bit(s) cambiaron:'),
+                res.changes.map(function(c, i) {
+                  return h('div', { key: i, style: {
+                    fontFamily: 'JetBrains Mono, monospace', fontSize: '13px',
+                    padding: '8px 12px', background: '#0B1220', borderRadius: '6px',
+                    border: '1px solid #1E2A40', marginBottom: '6px'
+                  } }, c.label);
+                })
+              )
         )
       );
     }

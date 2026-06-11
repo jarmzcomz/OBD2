@@ -338,6 +338,31 @@ def vag_known_coding(address: str) -> dict:
     return {"address": address, "functions": KNOWN_CODINGS.get(address, {})}
 
 
+class CodingDiffBody(BaseModel):
+    before_hex: str  # long coding leído ANTES del cambio
+    after_hex: str   # long coding leído DESPUÉS del cambio
+
+
+@app.post("/vag/bitfinder")
+def vag_bitfinder(body: CodingDiffBody) -> dict:
+    """Calcula el byte/bit EXACTO que cambió entre dos long codings.
+
+    Método empírico legítimo: el usuario lee el coding, cambia una función por el
+    método normal, vuelve a leer, y esta ruta deduce qué bits cambiaron. No calcula
+    SecurityAccess ni llaves.
+    """
+    from obdcore.vag.discovery import BitFinder
+
+    finder = BitFinder()
+    try:
+        finder.snapshot("before", body.before_hex)
+        finder.snapshot("after", body.after_hex)
+        candidates = finder.candidates("before", "after")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Long coding inválido: {exc}")
+    return {"changes": candidates, "count": len(candidates)}
+
+
 WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")

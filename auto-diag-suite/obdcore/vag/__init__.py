@@ -9,6 +9,7 @@ firmware.
 from __future__ import annotations
 
 from .adaptation import AdaptationChannel, AdaptationManager
+from .discovery import BitChange, BitFinder, diff_codings
 from .known_codings import KNOWN_CODINGS
 from .long_coding import LongCoding
 from .modules import VAG_MODULES, VagModule
@@ -22,4 +23,7 @@ __all__ = [
     "AdaptationChannel",
     "AdaptationManager",
     "KNOWN_CODINGS",
+    "BitFinder",
+    "BitChange",
+    "diff_codings",
 ]
