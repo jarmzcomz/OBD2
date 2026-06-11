@@ -1,0 +1,372 @@
+"""Backend FastAPI: REST + WebSocket para el dashboard local.
+
+Escucha sólo en 127.0.0.1 por defecto. Ejecutar:
+    ADS_TRANSPORT=sim uvicorn app.main:app --reload
+"""
+
+from __future__ import annotations
+
+import asyncio
+import pathlib
+import uuid
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from obdcore.obd2 import Obd2Client
+from obdcore.safety.backup import EcuBackup
+from obdcore.safety.guard import ZeroBrickError
+from obdcore.storage.db import Database
+from obdcore.transport import make_transport
+from obdcore.uds.services import UdsServices
+
+app = FastAPI(title="Auto-Diag Suite", version="0.1.0")
+
+# ---------------------------------------------------------------------------
+# Estado en memoria para sesiones activas y backups
+# ---------------------------------------------------------------------------
+
+# session_id (str uuid) -> {"db_id": int, "transport": str, "vin": str|None}
+_sessions: dict[str, dict] = {}
+
+# backup_id (str uuid) -> EcuBackup
+_backups: dict[str, EcuBackup] = {}
+
+_db = Database()
+
+
+def _client() -> Obd2Client:
+    transport = make_transport()
+    transport.open()
+    return Obd2Client(transport)
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
+@app.get("/pids")
+def pids() -> dict:
+    client = _client()
+    try:
+        return client.read_all_pids()
+    finally:
+        client.transport.close()
+
+
+@app.get("/dtc")
+def dtc() -> dict:
+    client = _client()
+    try:
+        return {"dtcs": client.read_dtcs()}
+    finally:
+        client.transport.close()
+
+
+@app.delete("/dtc")
+def clear_dtc() -> dict:
+    client = _client()
+    try:
+        return {"cleared": client.clear_dtcs()}
+    finally:
+        client.transport.close()
+
+
+@app.websocket("/ws/live")
+async def ws_live(ws: WebSocket) -> None:
+    """Emite los PIDs en vivo (~2 Hz) al dashboard."""
+    await ws.accept()
+    client = _client()
+    try:
+        while True:
+            await ws.send_json(client.read_all_pids())
+            await asyncio.sleep(0.5)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        client.transport.close()
+
+
+# ---------------------------------------------------------------------------
+# Modelos Pydantic para las nuevas rutas
+# ---------------------------------------------------------------------------
+
+class SessionCreate(BaseModel):
+    transport: str = "sim"
+    vin: Optional[str] = None
+
+
+class UdsReadBody(BaseModel):
+    did_hex: str  # e.g. "F190"
+
+
+class UdsBackupBody(BaseModel):
+    ecu_addr: str  # e.g. "0x7E0"
+    did_hex: str
+
+
+class UdsWriteBody(BaseModel):
+    ecu_addr: str
+    did_hex: str
+    data_hex: str
+    backup_id: str
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_session_or_404(session_id: str) -> dict:
+    if session_id not in _sessions:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    return _sessions[session_id]
+
+
+def _make_sim_uds_sender(ecu_addr: str):
+    """Sender simulado para UDS: devuelve respuestas positivas estándar."""
+    def sender(req: bytes) -> bytes:
+        sid = req[0]
+        if sid == 0x22:  # ReadDataByIdentifier
+            return bytes([0x62, req[1], req[2], 0xAA, 0xBB, 0xCC, 0xDD])
+        if sid == 0x2E:  # WriteDataByIdentifier
+            return bytes([0x6E, req[1], req[2]])
+        if sid == 0x10:  # DiagnosticSessionControl
+            return bytes([0x50, req[1]])
+        if sid == 0x3E:  # TesterPresent
+            return bytes([0x7E, 0x00])
+        return b""
+    return sender
+
+
+# ---------------------------------------------------------------------------
+# Nuevas rutas REST de sesión
+# ---------------------------------------------------------------------------
+
+@app.post("/session")
+def create_session(body: SessionCreate) -> dict:
+    """Abre una sesión de diagnóstico y la registra en la DB."""
+    db_id = _db.create_session(transport=body.transport, vin=body.vin)
+    session_id = str(uuid.uuid4())
+    _sessions[session_id] = {
+        "db_id": db_id,
+        "transport": body.transport,
+        "vin": body.vin,
+    }
+    return {"session_id": session_id}
+
+
+@app.get("/session/{session_id}/dtc")
+def session_dtc(session_id: str) -> dict:
+    """Lee DTCs usando el transporte de la sesión."""
+    _get_session_or_404(session_id)
+    transport = make_transport("sim")  # modo sim; en prod usar sesión.transport
+    transport.open()
+    try:
+        client = Obd2Client(transport)
+        dtcs = client.read_dtcs()
+    finally:
+        transport.close()
+    return {"dtcs": dtcs}
+
+
+@app.delete("/session/{session_id}/dtc")
+def session_clear_dtc(session_id: str) -> dict:
+    """Borra DTCs de la ECU."""
+    _get_session_or_404(session_id)
+    transport = make_transport("sim")
+    transport.open()
+    try:
+        client = Obd2Client(transport)
+        cleared = client.clear_dtcs()
+    finally:
+        transport.close()
+    return {"cleared": cleared}
+
+
+@app.post("/session/{session_id}/uds/read")
+def session_uds_read(session_id: str, body: UdsReadBody) -> dict:
+    """Lee un DID UDS (ReadDataByIdentifier)."""
+    _get_session_or_404(session_id)
+    did = int(body.did_hex, 16)
+    ecu_addr = "0x7E0"
+    sender = _make_sim_uds_sender(ecu_addr)
+    uds = UdsServices(sender, ecu_addr)
+    raw = uds.read_data_by_identifier(did)
+    return {"data_hex": raw.hex()}
+
+
+@app.post("/session/{session_id}/uds/backup")
+def session_uds_backup(session_id: str, body: UdsBackupBody) -> dict:
+    """Lee un DID y crea un backup verificado (Zero-Brick)."""
+    sess = _get_session_or_404(session_id)
+    did = int(body.did_hex, 16)
+    sender = _make_sim_uds_sender(body.ecu_addr)
+    uds = UdsServices(sender, body.ecu_addr)
+    backup = uds.backup_did(did)
+
+    # Guardar en memoria
+    backup_id = str(uuid.uuid4())
+    _backups[backup_id] = backup
+
+    # Persistir en DB
+    _db.save_backup(
+        session_id=sess["db_id"],
+        ecu_addr=backup.ecu_addr,
+        did_or_region=backup.did_or_region,
+        data=backup.data,
+        sha256=backup.sha256,
+    )
+
+    return {"backup_id": backup_id, "sha256": backup.sha256}
+
+
+@app.post("/session/{session_id}/uds/write")
+def session_uds_write(session_id: str, body: UdsWriteBody) -> dict:
+    """Escribe un DID UDS. Bloqueado sin backup verificado (Zero-Brick)."""
+    _get_session_or_404(session_id)
+
+    backup = _backups.get(body.backup_id)
+    if backup is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No existe backup verificado para este backup_id. "
+                   "Llama a /uds/backup primero.",
+        )
+
+    did = int(body.did_hex, 16)
+    data = bytes.fromhex(body.data_hex)
+    sender = _make_sim_uds_sender(body.ecu_addr)
+    uds = UdsServices(sender, body.ecu_addr)
+
+    try:
+        ok = uds.write_data_by_identifier(did, data, backup)
+    except ZeroBrickError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    return {"ok": ok}
+
+
+@app.get("/can/frames")
+def can_frames() -> dict:
+    """Devuelve las últimas tramas CAN (sim: genera 10 tramas sintéticas)."""
+    import random
+    import time
+
+    now = time.time()
+    frames = []
+    ids = [0x100, 0x200, 0x300, 0x7E8, 0x18DA10F1]
+    for i in range(10):
+        aid = random.choice(ids)
+        dlc = random.randint(1, 8)
+        data = [random.randint(0, 255) for _ in range(dlc)]
+        frames.append({
+            "ts": round(now - (9 - i) * 0.1, 3),
+            "id": hex(aid),
+            "dlc": dlc,
+            "data": " ".join(f"{b:02X}" for b in data),
+        })
+    return {"frames": frames}
+
+
+@app.get("/session/list")
+def session_list() -> dict:
+    """Lista las sesiones registradas en la DB."""
+    with _db.connect() as con:
+        rows = con.execute(
+            "SELECT id, started_at, vehicle_vin, transport FROM session ORDER BY id DESC LIMIT 20"
+        ).fetchall()
+    return {"sessions": [dict(r) for r in rows]}
+
+
+# ---------------------------------------------------------------------------
+# Rutas VAG (coding / adaptación del propietario) — VW T-Cross MQB-A0
+# ---------------------------------------------------------------------------
+
+
+def _make_sim_vag_sender(module):
+    """Sender UDS simulado por módulo VAG (responde TesterPresent, 0xF187 y DIDs)."""
+    def sender(req: bytes) -> bytes:
+        sid = req[0]
+        if sid == 0x3E:  # TesterPresent
+            return bytes([0x7E, 0x00])
+        if sid == 0x22:  # ReadDataByIdentifier
+            did = (req[1] << 8) | req[2]
+            if did == 0xF187:  # Part Number
+                return bytes([0x62, req[1], req[2]]) + b"5QM907530AB"
+            if did in (0xF190, 0xF1A0, 0x0600):  # long coding / DIDs de ejemplo
+                return bytes([0x62, req[1], req[2], 0x00, 0x04, 0x12, 0x80])
+            return b"\x7f\x22\x31"  # requestOutOfRange
+        if sid == 0x2E:  # WriteDataByIdentifier
+            return bytes([0x6E, req[1], req[2]])
+        if sid == 0x10:  # sesión
+            return bytes([0x50, req[1]])
+        return b""
+    return sender
+
+
+@app.get("/vag/modules")
+def vag_modules() -> dict:
+    """Lista el mapa de módulos conocidos del T-Cross."""
+    from obdcore.vag.modules import VAG_MODULES
+
+    return {
+        "modules": [
+            {"address": m.address, "name": m.name, "short": m.short}
+            for m in VAG_MODULES.values()
+        ]
+    }
+
+
+@app.get("/vag/scan")
+def vag_scan() -> dict:
+    """Escanea (no destructivo) qué módulos responden y su número de pieza."""
+    from obdcore.vag.scanner import ModuleScanner
+
+    scanner = ModuleScanner(_make_sim_vag_sender)
+    return {"results": scanner.scan_modules()}
+
+
+@app.get("/vag/coding/{address}")
+def vag_known_coding(address: str) -> dict:
+    """Devuelve las funciones de coding conocidas para un módulo (orientativas)."""
+    from obdcore.vag.known_codings import KNOWN_CODINGS
+
+    return {"address": address, "functions": KNOWN_CODINGS.get(address, {})}
+
+
+class CodingDiffBody(BaseModel):
+    before_hex: str  # long coding leído ANTES del cambio
+    after_hex: str   # long coding leído DESPUÉS del cambio
+
+
+@app.post("/vag/bitfinder")
+def vag_bitfinder(body: CodingDiffBody) -> dict:
+    """Calcula el byte/bit EXACTO que cambió entre dos long codings.
+
+    Método empírico legítimo: el usuario lee el coding, cambia una función por el
+    método normal, vuelve a leer, y esta ruta deduce qué bits cambiaron. No calcula
+    SecurityAccess ni llaves.
+    """
+    from obdcore.vag.discovery import BitFinder
+
+    finder = BitFinder()
+    try:
+        finder.snapshot("before", body.before_hex)
+        finder.snapshot("after", body.after_hex)
+        candidates = finder.candidates("before", "after")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Long coding inválido: {exc}")
+    return {"changes": candidates, "count": len(candidates)}
+
+
+WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
+if WEB_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+@app.get("/", include_in_schema=False)
+def root():
+    return FileResponse(str(WEB_DIR / "index.html"))

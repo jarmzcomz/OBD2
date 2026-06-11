@@ -1,0 +1,7 @@
+# Template — copy to local.properties and set your Android SDK path
+# NEVER commit local.properties to git
+# sdk.dir=/path/to/your/android/sdk
+# Examples:
+# macOS:   sdk.dir=/Users/yourname/Library/Android/sdk
+# Linux:   sdk.dir=/home/yourname/Android/Sdk
+# Windows: sdk.dir=C\:\\Users\\yourname\\AppData\\Local\\Android\\Sdk

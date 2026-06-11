@@ -1,0 +1,22 @@
+# Android local properties (contains SDK path — never commit)
+local.properties
+
+# Build outputs
+build/
+app/build/
+.gradle/
+
+# APKs and bundles
+*.apk
+*.aab
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Keystore (never commit)
+*.jks
+*.keystore
+release.properties
