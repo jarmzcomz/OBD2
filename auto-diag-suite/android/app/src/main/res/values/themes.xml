@@ -1,16 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.AutoDiag" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="Theme.AutoDiag" parent="Theme.AppCompat.Dark.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
-        <item name="colorOnPrimary">@color/white</item>
-        <item name="colorPrimaryContainer">@color/primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/text</item>
-        <item name="colorSurface">@color/surface</item>
-        <item name="colorOnSurface">@color/text</item>
-        <item name="colorBackground">@color/background</item>
-        <item name="colorOnBackground">@color/text</item>
-        <item name="colorError">@color/destructive</item>
-        <item name="colorOnError">@color/white</item>
+        <item name="colorPrimaryDark">@color/primary</item>
+        <item name="colorAccent">@color/primary</item>
         <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@color/surface</item>
         <item name="android:navigationBarColor">@color/background</item>
