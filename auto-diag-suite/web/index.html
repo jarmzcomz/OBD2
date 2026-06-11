@@ -1311,6 +1311,106 @@
     /* ═══════════════════════════════════════════
        LOGS TAB — Session History
     ═══════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════
+       VAG CODING — Escáner de módulos + coding T-Cross
+    ═══════════════════════════════════════════ */
+    function VAGCoding() {
+      var scanArr = React.useState(null);
+      var scan = scanArr[0], setScan = scanArr[1];
+      var loadingArr = React.useState(false);
+      var loading = loadingArr[0], setLoading = loadingArr[1];
+      var selArr = React.useState(null);
+      var selected = selArr[0], setSelected = selArr[1];
+      var fnArr = React.useState({});
+      var functions = fnArr[0], setFunctions = fnArr[1];
+
+      function runScan() {
+        setLoading(true);
+        fetch('http://127.0.0.1:8000/vag/scan')
+          .then(function(r) { return r.json(); })
+          .then(function(d) { setScan(d.results || []); setLoading(false); })
+          .catch(function() { setScan([]); setLoading(false); });
+      }
+
+      function openModule(addr) {
+        setSelected(addr);
+        fetch('http://127.0.0.1:8000/vag/coding/' + addr)
+          .then(function(r) { return r.json(); })
+          .then(function(d) { setFunctions(d.functions || {}); })
+          .catch(function() { setFunctions({}); });
+      }
+
+      return h('div', null,
+        /* Aviso de alcance */
+        h('div', { className: 'card', style: { borderLeft: '3px solid #2563EB' } },
+          h('div', { className: 'card-title' }, '🚗 VAG Coding — VW T-Cross (MQB-A0)'),
+          h('p', { style: { color: '#7C8AA5', fontSize: '13px', lineHeight: '1.5', margin: '8px 0 0' } },
+            'Coding y adaptación legítima del propietario. Lee el long coding real de cada módulo, ',
+            'haz backup (obligatorio, Zero-Brick) y activa funciones. Los byte/bit conocidos son ',
+            'orientativos de la comunidad: ', h('strong', null, 'verifícalos con tu coding real'),
+            ' antes de escribir. SecurityAccess usa tu llave del manual (la app no la calcula).'
+          )
+        ),
+
+        /* Escáner */
+        h('div', { className: 'card' },
+          h('div', { className: 'card-header' },
+            h('div', { className: 'card-title' }, '📡 Escáner de módulos'),
+            h('button', { className: 'btn btn-primary', onClick: runScan, disabled: loading },
+              loading ? 'Escaneando…' : 'Escanear vehículo')
+          ),
+          scan && h('table', { className: 'data-table' },
+            h('thead', null, h('tr', null,
+              h('th', null, 'Dir.'), h('th', null, 'Módulo'),
+              h('th', null, 'Estado'), h('th', null, 'Nº pieza'), h('th', null, ''))),
+            h('tbody', null, scan.map(function(m) {
+              return h('tr', { key: m.address },
+                h('td', { style: { fontFamily: 'JetBrains Mono, monospace' } }, m.address),
+                h('td', null, m.name),
+                h('td', null, m.present
+                  ? h('span', { style: { color: '#22C55E' } }, '● presente')
+                  : h('span', { style: { color: '#7C8AA5' } }, '○ no responde')),
+                h('td', { style: { fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' } },
+                  m.part_number || '—'),
+                h('td', null, m.present && h('button', {
+                  className: 'btn', style: { padding: '4px 10px', fontSize: '12px' },
+                  onClick: function() { openModule(m.address); }
+                }, 'Coding')));
+            }))
+          ),
+          !scan && !loading && h('div', { style: { color: '#7C8AA5', padding: '12px 0', fontSize: '13px' } },
+            'Pulsa "Escanear vehículo" para detectar los módulos disponibles.')
+        ),
+
+        /* Funciones conocidas del módulo seleccionado */
+        selected && h('div', { className: 'card' },
+          h('div', { className: 'card-title' }, '🔧 Funciones conocidas — módulo ' + selected),
+          Object.keys(functions).length === 0
+            ? h('div', { style: { color: '#7C8AA5', padding: '12px 0', fontSize: '13px' } },
+                'Sin funciones documentadas para este módulo. Usa UDS Console para leer el long coding y editarlo manualmente.')
+            : Object.keys(functions).map(function(key) {
+                var f = functions[key];
+                return h('div', { key: key, style: {
+                  padding: '12px', marginTop: '8px', background: '#0B1220',
+                  borderRadius: '8px', border: '1px solid #1E2A40'
+                } },
+                  h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    h('div', null,
+                      h('div', { style: { fontWeight: '600' } }, f.desc),
+                      h('div', { style: { fontSize: '12px', color: '#7C8AA5', fontFamily: 'JetBrains Mono, monospace' } },
+                        'byte ' + f.byte + ' · bit ' + f.bit)),
+                    h('span', { style: {
+                      fontSize: '11px', color: '#F59E0B', maxWidth: '40%', textAlign: 'right'
+                    } }, '⚠ ' + (f.note || 'verificar'))
+                  )
+                );
+              }),
+          h('div', { style: { fontSize: '12px', color: '#7C8AA5', marginTop: '12px' } },
+            'Para aplicar un cambio: ve a UDS Console → crea sesión → toma backup → escribe el long coding modificado.')
+        )
+      );
+    }
+
     function LogsPanel() {
       var sessionsArr = React.useState(null);
       var sessions = sessionsArr[0], setSessions = sessionsArr[1];
@@ -1390,6 +1490,7 @@
       { id: 'dtcs',      label: 'DTCs',          icon: '🔍' },
       { id: 'can',       label: 'CAN Monitor',   icon: '📡' },
       { id: 'uds',       label: 'UDS Console',   icon: '🔧' },
+      { id: 'vag',       label: 'VAG Coding',    icon: '🚗' },
       { id: 'logs',      label: 'Logs',           icon: '📋' }
     ];
 
@@ -1434,6 +1535,7 @@
           activeTab === 'dtcs'      && h(DTCPanel, null),
           activeTab === 'can'       && h(CANMonitor, null),
           activeTab === 'uds'       && h(UDSConsole, null),
+          activeTab === 'vag'       && h(VAGCoding, null),
           activeTab === 'logs'      && h(LogsPanel, null)
         ),
 

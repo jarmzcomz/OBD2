@@ -282,6 +282,62 @@ def session_list() -> dict:
     return {"sessions": [dict(r) for r in rows]}
 
 
+# ---------------------------------------------------------------------------
+# Rutas VAG (coding / adaptación del propietario) — VW T-Cross MQB-A0
+# ---------------------------------------------------------------------------
+
+
+def _make_sim_vag_sender(module):
+    """Sender UDS simulado por módulo VAG (responde TesterPresent, 0xF187 y DIDs)."""
+    def sender(req: bytes) -> bytes:
+        sid = req[0]
+        if sid == 0x3E:  # TesterPresent
+            return bytes([0x7E, 0x00])
+        if sid == 0x22:  # ReadDataByIdentifier
+            did = (req[1] << 8) | req[2]
+            if did == 0xF187:  # Part Number
+                return bytes([0x62, req[1], req[2]]) + b"5QM907530AB"
+            if did in (0xF190, 0xF1A0, 0x0600):  # long coding / DIDs de ejemplo
+                return bytes([0x62, req[1], req[2], 0x00, 0x04, 0x12, 0x80])
+            return b"\x7f\x22\x31"  # requestOutOfRange
+        if sid == 0x2E:  # WriteDataByIdentifier
+            return bytes([0x6E, req[1], req[2]])
+        if sid == 0x10:  # sesión
+            return bytes([0x50, req[1]])
+        return b""
+    return sender
+
+
+@app.get("/vag/modules")
+def vag_modules() -> dict:
+    """Lista el mapa de módulos conocidos del T-Cross."""
+    from obdcore.vag.modules import VAG_MODULES
+
+    return {
+        "modules": [
+            {"address": m.address, "name": m.name, "short": m.short}
+            for m in VAG_MODULES.values()
+        ]
+    }
+
+
+@app.get("/vag/scan")
+def vag_scan() -> dict:
+    """Escanea (no destructivo) qué módulos responden y su número de pieza."""
+    from obdcore.vag.scanner import ModuleScanner
+
+    scanner = ModuleScanner(_make_sim_vag_sender)
+    return {"results": scanner.scan_modules()}
+
+
+@app.get("/vag/coding/{address}")
+def vag_known_coding(address: str) -> dict:
+    """Devuelve las funciones de coding conocidas para un módulo (orientativas)."""
+    from obdcore.vag.known_codings import KNOWN_CODINGS
+
+    return {"address": address, "functions": KNOWN_CODINGS.get(address, {})}
+
+
 WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
