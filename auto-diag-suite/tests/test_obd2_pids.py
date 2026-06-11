@@ -33,3 +33,18 @@ def test_client_reads_simulated_dtc():
         client = Obd2Client(t)
         assert client.read_dtcs() == ["P0103"]
         assert client.clear_dtcs() is True
+
+
+def test_new_pids_in_table():
+    for code in ("0111", "010F", "0104", "0110", "012F", "0142"):
+        assert code in PIDS, f"PID {code} no encontrado en la tabla"
+
+
+def test_sim_reads_new_pids():
+    with Elm327Transport(simulated=True) as t:
+        client = Obd2Client(t)
+        values = client.read_all_pids()
+        assert "throttle" in values
+        assert "fuel_level" in values
+        assert "voltage" in values
+        assert 12 < values["voltage"] < 15  # 13.8V nominal
