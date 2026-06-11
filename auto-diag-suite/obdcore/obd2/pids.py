@@ -25,6 +25,9 @@ PIDS: dict[str, Pid] = {
     "0111": Pid("0111", "throttle", "%", lambda d: d[0] * 100 / 255),
     "010F": Pid("010F", "intake_temp", "°C", lambda d: d[0] - 40),
     "0104": Pid("0104", "engine_load", "%", lambda d: d[0] * 100 / 255),
+    "0110": Pid("0110", "maf", "g/s", lambda d: (d[0] * 256 + d[1]) / 100),
+    "012F": Pid("012F", "fuel_level", "%", lambda d: d[0] * 100 / 255),
+    "0142": Pid("0142", "voltage", "V", lambda d: (d[0] * 256 + d[1]) / 1000),
 }
 
 # Acceso por nombre legible además de por código.

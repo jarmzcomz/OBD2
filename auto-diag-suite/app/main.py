@@ -250,6 +250,38 @@ def session_uds_write(session_id: str, body: UdsWriteBody) -> dict:
     return {"ok": ok}
 
 
+@app.get("/can/frames")
+def can_frames() -> dict:
+    """Devuelve las últimas tramas CAN (sim: genera 10 tramas sintéticas)."""
+    import random
+    import time
+
+    now = time.time()
+    frames = []
+    ids = [0x100, 0x200, 0x300, 0x7E8, 0x18DA10F1]
+    for i in range(10):
+        aid = random.choice(ids)
+        dlc = random.randint(1, 8)
+        data = [random.randint(0, 255) for _ in range(dlc)]
+        frames.append({
+            "ts": round(now - (9 - i) * 0.1, 3),
+            "id": hex(aid),
+            "dlc": dlc,
+            "data": " ".join(f"{b:02X}" for b in data),
+        })
+    return {"frames": frames}
+
+
+@app.get("/session/list")
+def session_list() -> dict:
+    """Lista las sesiones registradas en la DB."""
+    with _db.connect() as con:
+        rows = con.execute(
+            "SELECT id, started_at, vehicle_vin, transport FROM session ORDER BY id DESC LIMIT 20"
+        ).fetchall()
+    return {"sessions": [dict(r) for r in rows]}
+
+
 WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")

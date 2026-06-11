@@ -75,6 +75,30 @@ class Elm327Transport(Transport):
             return b"44\r\r>"
         if req == b"0902":  # VIN (simplificado)
             return b"49 02 01 31 32 33 34\r\r>"
+        if req == b"0111":  # posición del acelerador: A*100/255, oscila 5-80 %
+            pct = 5 + 75 * (0.5 + 0.5 * math.sin(t / 3))
+            return _resp("41 11", [int(pct * 255 / 100) & 0xFF])
+        if req == b"010F":  # temperatura del aire de admisión: A-40, varía 20-40 °C
+            temp = 30 + 10 * math.sin(t / 20)
+            return _resp("41 0F", [int(temp) + 40])
+        if req == b"0104":  # carga del motor: A*100/255, correlacionada con RPM
+            rpm = 800 + 600 * (1 + math.sin(t / 2))
+            load = rpm / 2800 * 100  # aprox. proporcional a RPM
+            return _resp("41 04", [int(load * 255 / 100) & 0xFF])
+        if req == b"0110":  # flujo MAF: ((A*256)+B)/100, simula 10-200 g/s
+            maf = 10 + 190 * (0.5 + 0.5 * math.sin(t / 2))
+            raw = int(maf * 100) & 0xFFFF
+            return _resp("41 10", [raw >> 8, raw & 0xFF])
+        if req == b"0114":  # sensor de oxígeno: A*0.005 V, B=0 trim, rango 0-1.25 V
+            volt = 0.625 + 0.625 * math.sin(t / 1.5)
+            a = int(volt / 0.005) & 0xFF
+            return _resp("41 14", [a, 0x00])
+        if req == b"012F":  # nivel de combustible: A*100/255, fijo al 75 %
+            a = int(75 * 255 / 100) & 0xFF
+            return _resp("41 2F", [a])
+        if req == b"0142":  # voltaje del módulo de control: ((A*256)+B)/1000, ~13.8 V
+            raw = int(13.8 * 1000) & 0xFFFF
+            return _resp("41 42", [raw >> 8, raw & 0xFF])
         return b"NO DATA\r\r>"
 
 
