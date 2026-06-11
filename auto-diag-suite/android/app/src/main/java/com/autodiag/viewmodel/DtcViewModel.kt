@@ -5,12 +5,13 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.autodiag.data.BluetoothElm327
+import com.autodiag.data.BluetoothElm327Repository
 import com.autodiag.data.ObdRepository
-import com.autodiag.data.WebSocketClient
+import com.autodiag.data.WebSocketRepository
 import com.autodiag.model.DtcCode
 import com.autodiag.model.dtcDescriptions
 import com.autodiag.model.inferSeverity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class DtcViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -33,43 +35,55 @@ class DtcViewModel(application: Application) : AndroidViewModel(application) {
     val error: StateFlow<String?> = _error.asStateFlow()
 
     fun initialize(mode: String, address: String) {
-        val repo = when (mode) {
-            "bluetooth" -> {
-                val bluetoothManager = getApplication<Application>()
-                    .getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-                val adapter = bluetoothManager.adapter ?: run {
-                    _error.value = "Bluetooth not available"
-                    return
-                }
-                BluetoothElm327(address, adapter)
-            }
-            else -> WebSocketClient(host = address)
-        }
+        if (repository != null) return
+        val repo = createRepository(mode, address) ?: return
         repository = repo
 
-        viewModelScope.launch {
-            repo.connect()
-        }
-
+        _isLoading.value = true
         repo.dtcs
             .onEach { codes ->
                 _dtcs.value = codes.map { code ->
-                    DtcCode(
+                    val dtc = DtcCode(
                         code = code,
                         description = dtcDescriptions[code] ?: "Unknown fault code",
-                    ).let { it.copy(severity = it.inferSeverity()) }
+                    )
+                    dtc.copy(severity = dtc.inferSeverity())
                 }
-            }
-            .catch { e -> _error.value = e.message }
-            .launchIn(viewModelScope)
-
-        // Trigger DTC fetch for Bluetooth
-        if (mode == "bluetooth" && repo is BluetoothElm327) {
-            viewModelScope.launch {
-                _isLoading.value = true
-                (repo as BluetoothElm327).fetchDtcs()
                 _isLoading.value = false
             }
+            .catch { e ->
+                _error.value = e.message
+                _isLoading.value = false
+            }
+            .launchIn(viewModelScope)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.connect() }
+                .onFailure {
+                    _error.value = it.message
+                    _isLoading.value = false
+                }
+        }
+    }
+
+    private fun createRepository(mode: String, address: String): ObdRepository? {
+        return when (mode) {
+            "bluetooth" -> {
+                val manager = getApplication<Application>()
+                    .getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                val adapter = manager.adapter ?: run {
+                    _error.value = "Bluetooth not available"
+                    return null
+                }
+                val device = try {
+                    adapter.getRemoteDevice(address)
+                } catch (e: IllegalArgumentException) {
+                    _error.value = "Invalid Bluetooth address"
+                    return null
+                }
+                BluetoothElm327Repository(device)
+            }
+            else -> WebSocketRepository(host = address)
         }
     }
 
@@ -77,7 +91,8 @@ class DtcViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                repository?.clearDtcs()
+                withContext(Dispatchers.IO) { repository?.clearDtcs() }
+                _dtcs.value = emptyList()
             } catch (e: Exception) {
                 _error.value = "Failed to clear DTCs: ${e.message}"
             } finally {
