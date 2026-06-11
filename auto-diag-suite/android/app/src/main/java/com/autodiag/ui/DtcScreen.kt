@@ -53,7 +53,7 @@ fun DtcScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Fault Codes (DTC)",
+                        "Códigos de Falla (DTC)",
                         color = Color(0xFFE5EAF2),
                         fontWeight = FontWeight.Bold
                     )
@@ -62,7 +62,7 @@ fun DtcScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = "Volver",
                             tint = Color(0xFFE5EAF2)
                         )
                     }
@@ -72,7 +72,7 @@ fun DtcScreen(
                         IconButton(onClick = { viewModel.clearDtcs() }) {
                             Icon(
                                 Icons.Default.DeleteForever,
-                                contentDescription = "Clear DTCs",
+                                contentDescription = "Borrar DTCs",
                                 tint = Color(0xFFEF4444)
                             )
                         }
@@ -103,7 +103,7 @@ fun DtcScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            "Error reading DTCs",
+                            "Error al leer DTCs",
                             color = Color(0xFFEF4444),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -122,13 +122,13 @@ fun DtcScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            "✓ No fault codes found",
+                            "✓ Sin códigos de falla",
                             color = Color(0xFF22C55E),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Your vehicle is running clean",
+                            "Tu vehículo está funcionando limpio",
                             color = Color(0xFF7C8AA5),
                             fontSize = 14.sp
                         )
@@ -137,7 +137,7 @@ fun DtcScreen(
                 else -> {
                     Column {
                         Text(
-                            text = "${dtcs.size} fault code${if (dtcs.size != 1) "s" else ""} detected",
+                            text = "${dtcs.size} código${if (dtcs.size != 1) "s" else ""} de falla detectado${if (dtcs.size != 1) "s" else ""}",
                             color = Color(0xFF7C8AA5),
                             fontSize = 13.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)

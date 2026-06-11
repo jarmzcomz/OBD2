@@ -111,21 +111,29 @@ fun GaugeView(
 
             // Center text
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val display = if (value == value.toLong().toFloat()) {
+                    value.toLong().toString()
+                } else {
+                    "%.1f".format(value)
+                }
+                // Escala el número según su longitud para que nunca se corte.
+                val numberSize = when {
+                    display.length <= 3 -> 38f
+                    display.length == 4 -> 32f
+                    else -> 26f
+                }
                 Text(
-                    text = if (value == value.toLong().toFloat()) {
-                        value.toLong().toString()
-                    } else {
-                        "%.1f".format(value)
-                    },
+                    text = display,
                     color = gaugeColor,
-                    fontSize = (32 * (1f - label.length * 0.01f)).coerceIn(20f, 36f).sp,
+                    fontSize = numberSize.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
                 Text(
                     text = unit,
                     color = Color(0xFF7C8AA5),
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center
                 )
             }
@@ -134,10 +142,10 @@ fun GaugeView(
         Text(
             text = label,
             color = Color(0xFFE5EAF2),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 4.dp)
+            modifier = Modifier.padding(bottom = 6.dp)
         )
     }
 }

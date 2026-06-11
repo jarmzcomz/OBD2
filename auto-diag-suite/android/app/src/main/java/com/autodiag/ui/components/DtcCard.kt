@@ -71,8 +71,14 @@ fun DtcCard(dtc: DtcCode, modifier: Modifier = Modifier) {
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
+                val severidad = when (dtc.severity) {
+                    DtcSeverity.HIGH -> "Severidad alta"
+                    DtcSeverity.MEDIUM -> "Severidad media"
+                    DtcSeverity.LOW -> "Severidad baja"
+                    DtcSeverity.UNKNOWN -> "Severidad desconocida"
+                }
                 Text(
-                    text = dtc.severity.name.lowercase().replaceFirstChar { it.uppercase() } + " severity",
+                    text = severidad,
                     color = Color(0xFF7C8AA5),
                     fontSize = 11.sp,
                     modifier = Modifier.padding(top = 4.dp)
