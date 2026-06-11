@@ -72,28 +72,15 @@ fun ConnectScreen(
     onConnected: (mode: String, address: String) -> Unit,
     connectViewModel: ConnectViewModel = viewModel()
 ) {
+    // --- TODOS los remember/LaunchedEffect DEBEN ir aquí arriba, sin excepciones ---
+
     val connectState by connectViewModel.state.collectAsState()
-
-    // Navegar cuando la conexión sea exitosa
-    LaunchedEffect(connectState) {
-        if (connectState is ConnectState.Connected) {
-            connectViewModel.resetState()
-            // El modo y address ya fueron guardados en el ViewModel; se pasa un marcador
-            // para que el Dashboard sepa que el repo ya está listo en Application.
-            onConnected("connected", "")
-        }
-    }
-
-    // Si está conectando, mostrar pantalla de carga
-    if (connectState is ConnectState.Connecting) {
-        ConnectingScreen()
-        return
-    }
 
     var selectedMode by remember { mutableStateOf("wifi") }
     var wifiHost by remember { mutableStateOf("192.168.1.100") }
     var selectedDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
     var manualMac by remember { mutableStateOf("") }
+    var refreshTick by remember { mutableIntStateOf(0) }
 
     val context = LocalContext.current
     val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -101,14 +88,12 @@ fun ConnectScreen(
 
     val needsRuntimePermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val requiredPermissions = remember {
-        if (needsRuntimePermission) {
+        if (needsRuntimePermission)
             arrayOf(
                 android.Manifest.permission.BLUETOOTH_CONNECT,
                 android.Manifest.permission.BLUETOOTH_SCAN
             )
-        } else {
-            emptyArray()
-        }
+        else emptyArray()
     }
 
     fun hasBtPermission(): Boolean =
@@ -116,7 +101,6 @@ fun ConnectScreen(
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
 
-    var refreshTick by remember { mutableIntStateOf(0) }
     var hasBtPermission by remember { mutableStateOf(hasBtPermission()) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -130,31 +114,19 @@ fun ConnectScreen(
         ActivityResultContracts.StartActivityForResult()
     ) { refreshTick++ }
 
-    LaunchedEffect(Unit) {
-        if (needsRuntimePermission && !hasBtPermission) {
-            permissionLauncher.launch(requiredPermissions)
-        }
-    }
-
-    val btEnabled = bluetoothAdapter?.isEnabled == true
-
-    val pairedDevices: Set<BluetoothDevice> = remember(hasBtPermission, btEnabled, refreshTick) {
-        if (!hasBtPermission || bluetoothAdapter == null || !btEnabled) emptySet()
-        else try {
-            bluetoothAdapter.bondedDevices ?: emptySet()
-        } catch (_: SecurityException) {
-            emptySet()
-        }
-    }
-
-    fun requestEnableBluetooth() {
-        enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-    }
-
     val scope = rememberCoroutineScope()
-    val bleScanner = bluetoothAdapter?.bluetoothLeScanner
     val scannedBle = remember { mutableStateListOf<BluetoothDevice>() }
     var isScanning by remember { mutableStateOf(false) }
+
+    val scanPermissions = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            arrayOf(
+                android.Manifest.permission.BLUETOOTH_SCAN,
+                android.Manifest.permission.BLUETOOTH_CONNECT
+            )
+        else
+            arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+    }
 
     val scanCallback = remember {
         object : ScanCallback() {
@@ -165,23 +137,12 @@ fun ConnectScreen(
         }
     }
 
-    val scanPermissions = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf(
-                android.Manifest.permission.BLUETOOTH_SCAN,
-                android.Manifest.permission.BLUETOOTH_CONNECT
-            )
-        } else {
-            arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-    }
-
-    fun scanPermsGranted(): Boolean = scanPermissions.all {
+    fun scanPermsGranted() = scanPermissions.all {
         ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
     }
 
     fun startBleScan() {
-        val scanner = bleScanner ?: return
+        val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
         scannedBle.clear()
         isScanning = true
         try { scanner.startScan(scanCallback) } catch (_: SecurityException) { isScanning = false; return }
@@ -194,214 +155,189 @@ fun ConnectScreen(
 
     val scanPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ ->
-        if (scanPermsGranted()) startBleScan()
-    }
+    ) { _ -> if (scanPermsGranted()) startBleScan() }
 
-    fun ensureScanThenStart() {
-        if (!btEnabled) { requestEnableBluetooth(); return }
-        if (scanPermsGranted()) startBleScan() else scanPermLauncher.launch(scanPermissions)
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0B1220))
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Text("AutoDiag", color = Color(0xFF2563EB), fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "OBD-II Diagnostic Suite",
-            color = Color(0xFF7C8AA5),
-            fontSize = 14.sp,
-            modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
-        )
-
-        // Error state
-        if (connectState is ConnectState.Error) {
-            val errorMsg = (connectState as ConnectState.Error).message
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF2D1515), RoundedCornerShape(12.dp))
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "No se pudo conectar",
-                    color = Color(0xFFEF4444),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    errorMsg,
-                    color = Color(0xFFB0B8C8),
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Button(
-                    onClick = { connectViewModel.resetState() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
-                ) {
-                    Text("Reintentar", color = Color.White)
-                }
-            }
-            Spacer(modifier = Modifier.height(20.dp))
+    // Pedir permisos al inicio si hacen falta
+    LaunchedEffect(Unit) {
+        if (needsRuntimePermission && !hasBtPermission()) {
+            permissionLauncher.launch(requiredPermissions)
         }
+    }
 
-        // Mode selector
-        Text(
-            "Modo de conexión",
-            color = Color(0xFFE5EAF2),
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-        )
+    // Navegar cuando la conexión sea exitosa
+    LaunchedEffect(connectState) {
+        if (connectState is ConnectState.Connected) {
+            connectViewModel.resetState()
+            onConnected("connected", "")
+        }
+    }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+    // --- A partir de aquí: UI condicional (sin early return) ---
+
+    val btEnabled = bluetoothAdapter?.isEnabled == true
+
+    val pairedDevices: Set<BluetoothDevice> = remember(hasBtPermission, btEnabled, refreshTick) {
+        if (!hasBtPermission || bluetoothAdapter == null || !btEnabled) emptySet()
+        else try { bluetoothAdapter.bondedDevices ?: emptySet() }
+        catch (_: SecurityException) { emptySet() }
+    }
+
+    val isConnecting = connectState is ConnectState.Connecting
+    val connectError = (connectState as? ConnectState.Error)?.message
+
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0B1220))) {
+
+        // Pantalla de selección (siempre compuesta, solo visible cuando no conectando)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            ModeButton(
-                label = "WiFi / WebSocket",
-                icon = { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                selected = selectedMode == "wifi",
-                onClick = { selectedMode = "wifi"; selectedDevice = null },
-                modifier = Modifier.weight(1f)
-            )
-            ModeButton(
-                label = "BT Clásico\n(iCar Pro 3.0)",
-                icon = { Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                selected = selectedMode == "bluetooth",
-                onClick = { selectedMode = "bluetooth"; selectedDevice = null },
-                modifier = Modifier.weight(1f)
-            )
-            ModeButton(
-                label = "BT LE\n(iCar Pro 4.0)",
-                icon = { Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                selected = selectedMode == "ble",
-                onClick = { selectedMode = "ble"; selectedDevice = null },
-                modifier = Modifier.weight(1f)
-            )
-        }
+            Spacer(modifier = Modifier.height(40.dp))
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Text("AutoDiag", color = Color(0xFF2563EB), fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "OBD-II Diagnostic Suite",
+                color = Color(0xFF7C8AA5),
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
+            )
 
-        when (selectedMode) {
-            "wifi" -> {
-                Text(
-                    "Dirección del servidor (IP:puerto)",
-                    color = Color(0xFF7C8AA5),
-                    fontSize = 13.sp,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                )
-                OutlinedTextField(
-                    value = wifiHost,
-                    onValueChange = { wifiHost = it },
-                    placeholder = { Text("192.168.1.100:8000", color = Color(0xFF7C8AA5)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    colors = fieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Text(
-                    "WebSocket: ws://IP:8000/ws/live",
-                    color = Color(0xFF7C8AA5),
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            "ble" -> {
-                Text(
-                    "Dispositivos Bluetooth LE (escaneo)",
-                    color = Color(0xFF7C8AA5),
-                    fontSize = 13.sp,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                )
-                Button(
-                    onClick = { ensureScanThenStart() },
-                    enabled = !isScanning,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
-                    modifier = Modifier.fillMaxWidth()
+            // Banner de error
+            if (connectError != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF2D1515), RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (isScanning) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Escaneando...", color = Color.White)
-                    } else {
-                        Text("Escanear adaptador BLE", color = Color.White)
-                    }
+                    Text("No se pudo conectar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(connectError, color = Color(0xFFB0B8C8), fontSize = 12.sp, textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = { connectViewModel.resetState() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                    ) { Text("Reintentar", color = Color.White) }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                if (scannedBle.isEmpty()) {
-                    Text(
-                        "Presiona Escanear. Tu iCar Pro 4.0 aparecerá con nombre " +
-                            "\"Vlink\", \"iCar\" u \"OBD\". Asegúrate que esté conectado al vehículo.",
-                        color = Color(0xFF7C8AA5),
-                        fontSize = 11.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF131C2E), RoundedCornerShape(8.dp))
-                            .padding(16.dp)
-                    )
-                } else {
-                    DeviceList(
-                        devices = scannedBle.toList(),
-                        selectedDevice = selectedDevice,
-                        onSelect = { selectedDevice = it }
-                    )
-                }
+                Spacer(modifier = Modifier.height(20.dp))
             }
 
-            else -> {
-                // Bluetooth Clásico: mostrar dispositivos emparejados
-                Text(
-                    "Dispositivos Bluetooth emparejados",
-                    color = Color(0xFF7C8AA5),
-                    fontSize = 13.sp,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            // Selector de modo
+            Text(
+                "Modo de conexión",
+                color = Color(0xFFE5EAF2),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            )
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ModeButton(
+                    label = "WiFi\nWebSocket",
+                    icon = { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    selected = selectedMode == "wifi",
+                    onClick = { selectedMode = "wifi"; selectedDevice = null },
+                    modifier = Modifier.weight(1f)
                 )
-                when {
-                    !hasBtPermission -> {
-                        InfoBox {
-                            Text("Se requiere permiso Bluetooth para listar el adaptador.", color = Color(0xFF7C8AA5), fontSize = 12.sp)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = { permissionLauncher.launch(requiredPermissions) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
-                            ) { Text("Conceder permiso", color = Color.White) }
+                ModeButton(
+                    label = "BT Clásico\niCar Pro 3.0",
+                    icon = { Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    selected = selectedMode == "bluetooth",
+                    onClick = { selectedMode = "bluetooth"; selectedDevice = null },
+                    modifier = Modifier.weight(1f)
+                )
+                ModeButton(
+                    label = "BT LE\niCar Pro 4.0",
+                    icon = { Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    selected = selectedMode == "ble",
+                    onClick = { selectedMode = "ble"; selectedDevice = null },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            when (selectedMode) {
+                "wifi" -> {
+                    Text("IP del servidor", color = Color(0xFF7C8AA5), fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+                    OutlinedTextField(
+                        value = wifiHost,
+                        onValueChange = { wifiHost = it },
+                        placeholder = { Text("192.168.1.100:8000", color = Color(0xFF7C8AA5)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        colors = fieldColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Text("WebSocket: ws://IP:8000/ws/live", color = Color(0xFF7C8AA5), fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+                }
+
+                "ble" -> {
+                    Text("Dispositivos Bluetooth LE", color = Color(0xFF7C8AA5), fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+                    Button(
+                        onClick = {
+                            if (!btEnabled) {
+                                enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                            } else if (scanPermsGranted()) {
+                                startBleScan()
+                            } else {
+                                scanPermLauncher.launch(scanPermissions)
+                            }
+                        },
+                        enabled = !isScanning,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isScanning) {
+                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Escaneando...", color = Color.White)
+                        } else {
+                            Text("Escanear adaptador BLE", color = Color.White)
                         }
                     }
-                    !btEnabled -> {
-                        InfoBox {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (scannedBle.isEmpty()) {
+                        Text(
+                            "Presiona Escanear. Tu iCar Pro 4.0 aparecerá como " +
+                                "\"Vlink\", \"iCar\" u \"OBD\". El dongle debe estar en el carro.",
+                            color = Color(0xFF7C8AA5), fontSize = 11.sp,
+                            modifier = Modifier.fillMaxWidth().background(Color(0xFF131C2E), RoundedCornerShape(8.dp)).padding(16.dp)
+                        )
+                    } else {
+                        DeviceList(devices = scannedBle.toList(), selectedDevice = selectedDevice, onSelect = { selectedDevice = it })
+                    }
+                }
+
+                else -> {
+                    // Bluetooth Clásico
+                    Text("Dispositivos emparejados", color = Color(0xFF7C8AA5), fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+                    when {
+                        !hasBtPermission -> InfoBox {
+                            Text("Se necesita permiso Bluetooth.", color = Color(0xFF7C8AA5), fontSize = 12.sp)
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = { permissionLauncher.launch(requiredPermissions) }, colors = ButtonDefaults.buttonColors(Color(0xFF2563EB))) {
+                                Text("Conceder permiso", color = Color.White)
+                            }
+                        }
+                        !btEnabled -> InfoBox {
                             Text("Bluetooth está apagado.", color = Color(0xFF7C8AA5), fontSize = 12.sp)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = { requestEnableBluetooth() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
-                            ) { Text("Activar Bluetooth", color = Color.White) }
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = { enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }, colors = ButtonDefaults.buttonColors(Color(0xFF2563EB))) {
+                                Text("Activar Bluetooth", color = Color.White)
+                            }
                         }
-                    }
-                    pairedDevices.isEmpty() -> {
-                        InfoBox {
-                            Text(
-                                "No hay dispositivos emparejados. Empareja el adaptador en " +
-                                    "Configuración → Bluetooth, luego vuelve aquí.",
-                                color = Color(0xFF7C8AA5), fontSize = 12.sp
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = { refreshTick++ },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
-                            ) { Text("Actualizar lista", color = Color.White) }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("O ingresa la dirección MAC manualmente:", color = Color(0xFF7C8AA5), fontSize = 11.sp, modifier = Modifier.padding(bottom = 8.dp))
+                        pairedDevices.isEmpty() -> InfoBox {
+                            Text("No hay dispositivos emparejados. Ve a Configuración → Bluetooth, empareja el adaptador y vuelve.", color = Color(0xFF7C8AA5), fontSize = 12.sp)
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = { refreshTick++ }, colors = ButtonDefaults.buttonColors(Color(0xFF2563EB))) {
+                                Text("Actualizar lista", color = Color.White)
+                            }
+                            Spacer(Modifier.height(16.dp))
+                            Text("O ingresa la MAC manualmente:", color = Color(0xFF7C8AA5), fontSize = 11.sp, modifier = Modifier.padding(bottom = 8.dp))
                             OutlinedTextField(
                                 value = manualMac,
                                 onValueChange = { manualMac = it.uppercase() },
@@ -411,87 +347,68 @@ fun ConnectScreen(
                                 singleLine = true
                             )
                             if (BluetoothAdapter.checkBluetoothAddress(manualMac)) {
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(Modifier.height(8.dp))
                                 Button(
                                     onClick = { connectViewModel.connect("bluetooth", manualMac) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                    colors = ButtonDefaults.buttonColors(Color(0xFF2563EB)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text("Conectar a este MAC", color = Color.White) }
                             }
                         }
-                    }
-                    else -> {
-                        DeviceList(
-                            devices = pairedDevices.toList(),
-                            selectedDevice = selectedDevice,
-                            onSelect = { selectedDevice = it }
-                        )
+                        else -> DeviceList(devices = pairedDevices.toList(), selectedDevice = selectedDevice, onSelect = { selectedDevice = it })
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Dispositivo seleccionado
+            if (selectedDevice != null) {
+                val devName = try { selectedDevice!!.name ?: selectedDevice!!.address } catch (_: SecurityException) { selectedDevice!!.address }
+                Text("Seleccionado: $devName", color = Color(0xFF22C55E), fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+            }
+
+            val canConnect = when (selectedMode) {
+                "wifi" -> wifiHost.isNotBlank()
+                else -> selectedDevice != null
+            }
+
+            Button(
+                onClick = {
+                    val address = if (selectedMode == "wifi") wifiHost.trim() else selectedDevice!!.address
+                    connectViewModel.connect(selectedMode, address)
+                },
+                enabled = canConnect && !isConnecting,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2563EB),
+                    disabledContainerColor = Color(0xFF1E2A3D)
+                )
+            ) {
+                Text("Conectar", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Información del dispositivo seleccionado
-        if (selectedDevice != null) {
-            val devName = try { selectedDevice!!.name ?: selectedDevice!!.address } catch (_: SecurityException) { selectedDevice!!.address }
-            Text(
-                "Seleccionado: $devName",
-                color = Color(0xFF22C55E),
-                fontSize = 12.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-        }
-
-        val canConnect = when (selectedMode) {
-            "wifi" -> wifiHost.isNotBlank()
-            "bluetooth", "ble" -> selectedDevice != null
-            else -> false
-        }
-
-        Button(
-            onClick = {
-                val address = when (selectedMode) {
-                    "wifi" -> wifiHost.trim()
-                    else -> selectedDevice!!.address
+        // Overlay de "Conectando..." encima de todo, sin interrumpir el árbol de composables
+        if (isConnecting) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color(0xE60B1220)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color(0xFF2563EB), modifier = Modifier.size(56.dp), strokeWidth = 4.dp)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("Conectando al adaptador...", color = Color(0xFFE5EAF2), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Estableciendo conexión Bluetooth.\nMantén el vehículo en contacto (ACC o motor).",
+                        color = Color(0xFF7C8AA5), fontSize = 13.sp, textAlign = TextAlign.Center
+                    )
                 }
-                connectViewModel.connect(selectedMode, address)
-            },
-            enabled = canConnect,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF2563EB),
-                disabledContainerColor = Color(0xFF1E2A3D)
-            )
-        ) {
-            Text("Conectar", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-@Composable
-private fun ConnectingScreen() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0B1220)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = Color(0xFF2563EB), modifier = Modifier.size(56.dp), strokeWidth = 4.dp)
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Conectando al adaptador...", color = Color(0xFFE5EAF2), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Enviando comandos AT al ELM327.\nMantén el vehículo en contacto.",
-                color = Color(0xFF7C8AA5),
-                fontSize = 13.sp,
-                textAlign = TextAlign.Center
-            )
+            }
         }
     }
 }
@@ -519,21 +436,13 @@ private fun DeviceList(
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.Bluetooth,
-                    contentDescription = null,
-                    tint = if (isSelected) Color(0xFF2563EB) else Color(0xFF7C8AA5),
-                    modifier = Modifier.size(20.dp)
-                )
+                Icon(Icons.Default.Bluetooth, contentDescription = null, tint = if (isSelected) Color(0xFF2563EB) else Color(0xFF7C8AA5), modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(12.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(name, color = Color(0xFFE5EAF2), fontSize = 14.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
                     Text(device.address, color = Color(0xFF7C8AA5), fontSize = 11.sp)
                 }
-                if (isSelected) {
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text("✓", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold)
-                }
+                if (isSelected) Text("✓", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -542,10 +451,7 @@ private fun DeviceList(
 @Composable
 private fun InfoBox(content: @Composable Column.() -> Unit) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF131C2E), RoundedCornerShape(8.dp))
-            .padding(16.dp),
+        modifier = Modifier.fillMaxWidth().background(Color(0xFF131C2E), RoundedCornerShape(8.dp)).padding(16.dp),
         content = content
     )
 }
@@ -571,15 +477,8 @@ private fun ModeButton(
 ) {
     Column(
         modifier = modifier
-            .background(
-                color = if (selected) Color(0xFF1E3A5F) else Color(0xFF131C2E),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .border(
-                width = 1.dp,
-                color = if (selected) Color(0xFF2563EB) else Color(0xFF1E2A3D),
-                shape = RoundedCornerShape(12.dp)
-            )
+            .background(if (selected) Color(0xFF1E3A5F) else Color(0xFF131C2E), RoundedCornerShape(12.dp))
+            .border(1.dp, if (selected) Color(0xFF2563EB) else Color(0xFF1E2A3D), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
