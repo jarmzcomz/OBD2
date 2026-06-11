@@ -37,13 +37,11 @@ import com.autodiag.viewmodel.DtcViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DtcScreen(
-    mode: String,
-    address: String,
     onBack: () -> Unit,
     viewModel: DtcViewModel = viewModel()
 ) {
-    LaunchedEffect(mode, address) {
-        viewModel.initialize(mode, address)
+    LaunchedEffect(Unit) {
+        viewModel.initialize()
     }
 
     val dtcs by viewModel.dtcs.collectAsState()

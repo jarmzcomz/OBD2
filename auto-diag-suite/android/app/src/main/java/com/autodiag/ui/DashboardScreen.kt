@@ -41,14 +41,12 @@ import com.autodiag.viewmodel.DashboardViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    mode: String,
-    address: String,
     onNavigateToDtc: () -> Unit,
     onDisconnect: () -> Unit,
     viewModel: DashboardViewModel = viewModel()
 ) {
-    LaunchedEffect(mode, address) {
-        viewModel.initialize(mode, address)
+    LaunchedEffect(Unit) {
+        viewModel.initialize()
     }
 
     val pidData by viewModel.pidData.collectAsState()
