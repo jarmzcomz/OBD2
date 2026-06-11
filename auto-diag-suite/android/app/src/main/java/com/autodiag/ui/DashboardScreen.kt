@@ -136,15 +136,25 @@ fun DashboardScreen(
 
                 pidData.isEmpty() -> {
                     Column(
-                        modifier = Modifier.align(Alignment.Center),
+                        modifier = Modifier.align(Alignment.Center).padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         CircularProgressIndicator(color = Color(0xFF2563EB), strokeWidth = 3.dp)
                         Spacer(modifier = Modifier.height(20.dp))
                         Text(
-                            "Leyendo datos del vehículo...",
+                            "Esperando datos del vehículo",
+                            color = Color(0xFFE5EAF2),
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Asegúrate de que el motor esté encendido o en " +
+                                "contacto (ACC). Si tu carro está apagado, la ECU " +
+                                "no responde a las consultas OBD-II.",
                             color = Color(0xFF7C8AA5),
-                            fontSize = 16.sp
+                            fontSize = 13.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }
