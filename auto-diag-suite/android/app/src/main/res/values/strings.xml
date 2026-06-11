@@ -1,7 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Auto-Diag Suite</string>
-    <string name="tab_dashboard">Dashboard</string>
-    <string name="tab_dtc">DTCs</string>
-    <string name="tab_connect">Conectar</string>
+    <string name="app_name">AutoDiag</string>
+    <string name="connect_title">Connect to Vehicle</string>
+    <string name="dashboard_title">Dashboard</string>
+    <string name="dtc_title">Fault Codes</string>
+    <string name="mode_wifi">WiFi / WebSocket</string>
+    <string name="mode_bluetooth">Bluetooth ELM327</string>
+    <string name="btn_connect">Connect</string>
+    <string name="btn_disconnect">Disconnect</string>
+    <string name="btn_clear_dtcs">Clear DTCs</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="no_dtcs">No fault codes found</string>
+    <string name="label_rpm">RPM</string>
+    <string name="label_coolant">Coolant Temp</string>
+    <string name="label_speed">Speed</string>
+    <string name="label_throttle">Throttle</string>
+    <string name="label_intake">Intake Temp</string>
+    <string name="label_load">Engine Load</string>
 </resources>

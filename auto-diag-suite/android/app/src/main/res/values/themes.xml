@@ -2,8 +2,17 @@
 <resources>
     <style name="Theme.AutoDiag" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
-        <item name="colorOnPrimary">@color/text</item>
-        <item name="colorSecondary">@color/secondary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/text</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="colorBackground">@color/background</item>
+        <item name="colorOnBackground">@color/text</item>
+        <item name="colorError">@color/destructive</item>
+        <item name="colorOnError">@color/white</item>
         <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/surface</item>
+        <item name="android:navigationBarColor">@color/background</item>
     </style>
 </resources>
