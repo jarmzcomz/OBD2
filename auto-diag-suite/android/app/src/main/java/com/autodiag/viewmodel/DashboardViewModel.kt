@@ -73,7 +73,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     _error.value = "Invalid Bluetooth address"
                     return null
                 }
-                BluetoothElm327Repository(device)
+                BluetoothElm327Repository(device, adapter)
             }
             else -> WebSocketRepository(host = address)
         }

@@ -5,6 +5,12 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,10 +61,45 @@ fun ConnectScreen(onConnected: (mode: String, address: String) -> Unit) {
     val context = LocalContext.current
     val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
-    val pairedDevices: Set<BluetoothDevice> = try {
-        bluetoothAdapter?.bondedDevices ?: emptySet()
-    } catch (_: SecurityException) {
-        emptySet()
+
+    // En Android 12+ se necesita BLUETOOTH_CONNECT concedido en runtime; sin él
+    // bondedDevices lanza SecurityException y la lista de dongles sale vacía
+    // (síntoma: "no reconoce el dongle"). Pedimos el permiso al entrar.
+    val requiredPermissions = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_SCAN
+            )
+        } else {
+            arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
+    fun hasAllPermissions(): Boolean = requiredPermissions.all {
+        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    var hasBtPermission by remember { mutableStateOf(hasAllPermissions()) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        hasBtPermission = result.values.all { it } || hasAllPermissions()
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasBtPermission) permissionLauncher.launch(requiredPermissions)
+    }
+
+    // Se recalcula cuando se concede el permiso, refrescando la lista de dongles.
+    val pairedDevices: Set<BluetoothDevice> = remember(hasBtPermission) {
+        if (!hasBtPermission) emptySet()
+        else try {
+            bluetoothAdapter?.bondedDevices ?: emptySet()
+        } catch (_: SecurityException) {
+            emptySet()
+        }
     }
 
     Column(
@@ -159,7 +200,27 @@ fun ConnectScreen(onConnected: (mode: String, address: String) -> Unit) {
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
             )
-            if (pairedDevices.isEmpty()) {
+            if (!hasBtPermission) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF131C2E), RoundedCornerShape(8.dp))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        "Bluetooth permission required to list your ELM327 adapter.",
+                        color = Color(0xFF7C8AA5),
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { permissionLauncher.launch(requiredPermissions) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                    ) {
+                        Text("Grant Bluetooth permission", color = Color.White)
+                    }
+                }
+            } else if (pairedDevices.isEmpty()) {
                 Text(
                     "No paired devices found. Pair your ELM327 adapter in Android Settings → Bluetooth first.",
                     color = Color(0xFF7C8AA5),

@@ -81,7 +81,7 @@ class DtcViewModel(application: Application) : AndroidViewModel(application) {
                     _error.value = "Invalid Bluetooth address"
                     return null
                 }
-                BluetoothElm327Repository(device)
+                BluetoothElm327Repository(device, adapter)
             }
             else -> WebSocketRepository(host = address)
         }
