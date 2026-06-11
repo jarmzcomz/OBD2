@@ -10,6 +10,10 @@ on:
       - ".github/workflows/android.yml"
   workflow_dispatch:
 
+# Permite que el job cree/actualice un Release con el APK adjunto.
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -46,3 +50,20 @@ jobs:
           name: auto-diag-suite-debug-apk
           path: auto-diag-suite/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # Publica el APK en un Release con tag fijo "android-latest" para tener
+      # un enlace de descarga directa (sin login) que siempre apunta al
+      # ultimo APK compilado. Solo corre en push a la rama, no en PRs.
+      - name: Publish APK to Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: AutoDiag Android (ultimo build)
+          body: |
+            APK de debug compilado automaticamente desde la rama de desarrollo.
+
+            Descarga directa: **app-debug.apk** (mas abajo en Assets).
+            Commit: ${{ github.sha }}
+          files: auto-diag-suite/android/app/build/outputs/apk/debug/*.apk
+          fail_on_unmatched_files: true
