@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -449,7 +450,7 @@ private fun DeviceList(
 }
 
 @Composable
-private fun InfoBox(content: @Composable Column.() -> Unit) {
+private fun InfoBox(content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth().background(Color(0xFF131C2E), RoundedCornerShape(8.dp)).padding(16.dp),
         content = content
