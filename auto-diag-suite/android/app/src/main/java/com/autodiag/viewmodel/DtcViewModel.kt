@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.autodiag.data.BleElm327Repository
 import com.autodiag.data.BluetoothElm327Repository
 import com.autodiag.data.ObdRepository
 import com.autodiag.data.WebSocketRepository
@@ -68,9 +69,9 @@ class DtcViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun createRepository(mode: String, address: String): ObdRepository? {
         return when (mode) {
-            "bluetooth" -> {
-                val manager = getApplication<Application>()
-                    .getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            "bluetooth", "ble" -> {
+                val app = getApplication<Application>()
+                val manager = app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
                 val adapter = manager.adapter ?: run {
                     _error.value = "Bluetooth not available"
                     return null
@@ -81,7 +82,8 @@ class DtcViewModel(application: Application) : AndroidViewModel(application) {
                     _error.value = "Invalid Bluetooth address"
                     return null
                 }
-                BluetoothElm327Repository(device)
+                if (mode == "ble") BleElm327Repository(device, app)
+                else BluetoothElm327Repository(device, adapter)
             }
             else -> WebSocketRepository(host = address)
         }
