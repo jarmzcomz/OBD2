@@ -12,11 +12,13 @@
     :root {
       --bg: #0B1220;
       --surface: #131C2E;
+      --surface2: #182030;
       --primary: #2563EB;
       --text: #E5EAF2;
       --muted: #7C8AA5;
       --success: #22C55E;
       --destructive: #EF4444;
+      --warning: #F59E0B;
       --secondary: #0EA5E9;
       --border: #1E2D45;
       --radius: 8px;
@@ -28,6 +30,8 @@
       color: var(--text);
       font-family: 'Inter', system-ui, sans-serif;
       min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     /* ── Header ── */
@@ -35,28 +39,46 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 32px;
+      padding: 14px 32px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
     .header-brand {
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 700;
       letter-spacing: -0.3px;
     }
-    .header-brand span { font-size: 22px; }
+    .header-brand span { font-size: 20px; }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .fps-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+    .fps-badge.active { color: var(--success); }
 
     /* ── Connection badge ── */
     .conn-badge {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 6px 14px;
+      padding: 5px 14px;
       border-radius: 20px;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       border: 1px solid;
       transition: all 0.3s;
@@ -72,8 +94,8 @@
       background: rgba(239,68,68,0.08);
     }
     .conn-dot {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: currentColor;
     }
@@ -83,15 +105,52 @@
       50% { opacity: 0.4; }
     }
 
+    /* ── Tabs ── */
+    .tabs-nav {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 0 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 12px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 0.2s, border-color 0.2s;
+      font-family: inherit;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      font-weight: 600;
+    }
+
     /* ── Main layout ── */
     .main {
-      max-width: 1100px;
+      max-width: 1200px;
+      width: 100%;
       margin: 0 auto;
-      padding: 32px 24px;
+      padding: 28px 24px;
       display: flex;
       flex-direction: column;
-      gap: 28px;
+      gap: 24px;
+      flex: 1;
     }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
 
     /* ── Section label ── */
     .section-label {
@@ -103,60 +162,79 @@
       margin-bottom: 16px;
     }
 
-    /* ── Gauges row ── */
-    .gauges-row {
+    /* ── Gauges grid 3x2 ── */
+    .gauges-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
+      gap: 16px;
+      margin-bottom: 8px;
     }
 
     .gauge-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-card);
-      padding: 28px 20px 24px;
+      padding: 22px 16px 18px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       transition: border-color 0.3s;
     }
     .gauge-card:hover { border-color: rgba(37,99,235,0.4); }
-
     .gauge-svg { display: block; }
-
     .gauge-value {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 28px;
+      font-size: 24px;
       font-weight: 700;
       letter-spacing: -1px;
       line-height: 1;
     }
-    .gauge-label {
-      text-align: center;
-    }
+    .gauge-label { text-align: center; }
     .gauge-name {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.8px;
     }
     .gauge-unit {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--muted);
       margin-top: 2px;
     }
+    .gauge-ts {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      opacity: 0.7;
+      margin-top: -4px;
+    }
 
-    /* ── DTC Panel ── */
-    .dtc-card {
+    /* ── Skeleton ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--border) 25%, rgba(30,45,69,0.4) 50%, var(--border) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .skeleton-row {
+      height: 44px;
+      margin-bottom: 8px;
+    }
+
+    /* ── Cards ── */
+    .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-card);
       padding: 24px 28px;
     }
-
-    .dtc-header {
+    .card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -164,17 +242,18 @@
       flex-wrap: wrap;
       gap: 12px;
     }
-    .dtc-title {
-      font-size: 16px;
+    .card-title {
+      font-size: 15px;
       font-weight: 600;
     }
-    .dtc-actions { display: flex; gap: 10px; }
+    .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+    /* ── Buttons ── */
     .btn {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 8px 18px;
+      padding: 7px 16px;
       border-radius: var(--radius);
       font-size: 13px;
       font-weight: 600;
@@ -184,34 +263,33 @@
       font-family: inherit;
     }
     .btn:active { transform: scale(0.97); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .btn-primary {
-      background: var(--primary);
-      color: #fff;
-    }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
     .btn-primary:hover:not(:disabled) { opacity: 0.88; }
-
-    .btn-danger {
-      background: rgba(239,68,68,0.15);
-      color: var(--destructive);
-      border: 1px solid rgba(239,68,68,0.3);
-    }
+    .btn-success { background: rgba(34,197,94,0.15); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
+    .btn-success:hover:not(:disabled) { background: rgba(34,197,94,0.25); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: var(--destructive); border: 1px solid rgba(239,68,68,0.3); }
     .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.25); }
+    .btn-ghost { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.09); }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
 
-    /* DTC table */
-    .dtc-table-wrap {
+    /* ── Tables ── */
+    .table-wrap {
       border-radius: var(--radius);
       border: 1px solid var(--border);
       overflow: hidden;
+      overflow-x: auto;
     }
-    .dtc-table {
+    .data-table {
       width: 100%;
       border-collapse: collapse;
+      font-size: 13px;
+      min-width: 600px;
     }
-    .dtc-table th {
+    .data-table th {
       background: rgba(255,255,255,0.03);
-      padding: 10px 16px;
+      padding: 10px 14px;
       text-align: left;
       font-size: 11px;
       font-weight: 600;
@@ -219,27 +297,29 @@
       text-transform: uppercase;
       color: var(--muted);
       border-bottom: 1px solid var(--border);
+      white-space: nowrap;
     }
-    .dtc-table td {
-      padding: 12px 16px;
-      font-size: 13px;
+    .data-table td {
+      padding: 10px 14px;
       border-bottom: 1px solid rgba(30,45,69,0.6);
+      font-size: 12px;
     }
-    .dtc-table tr:last-child td { border-bottom: none; }
-    .dtc-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
 
-    .dtc-code {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--secondary);
-    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .text-blue { color: var(--secondary); }
+    .text-green { color: var(--success); }
+    .text-red { color: var(--destructive); }
+    .text-muted { color: var(--muted); }
+    .text-warn { color: var(--warning); }
 
+    /* DTC badge */
     .dtc-badge {
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      padding: 3px 10px;
+      padding: 2px 9px;
       border-radius: 12px;
       font-size: 11px;
       font-weight: 600;
@@ -248,7 +328,8 @@
       border: 1px solid rgba(239,68,68,0.25);
     }
 
-    .dtc-empty {
+    /* ── Empty / Error states ── */
+    .empty-state {
       text-align: center;
       padding: 40px 20px;
       color: var(--muted);
@@ -256,18 +337,10 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
-    .dtc-empty-icon { font-size: 28px; }
-
-    .dtc-loading {
-      text-align: center;
-      padding: 32px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .dtc-error {
+    .empty-icon { font-size: 32px; }
+    .error-box {
       padding: 12px 16px;
       border-radius: var(--radius);
       background: rgba(239,68,68,0.08);
@@ -276,32 +349,230 @@
       font-size: 13px;
       margin-top: 12px;
     }
+    .info-box {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      background: rgba(14,165,233,0.08);
+      border: 1px solid rgba(14,165,233,0.2);
+      color: var(--secondary);
+      font-size: 13px;
+    }
+    .success-box {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.2);
+      color: var(--success);
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      word-break: break-all;
+    }
 
-    /* Success toast */
-    .toast {
+    /* ── Toast system ── */
+    .toast-container {
       position: fixed;
       bottom: 24px;
       right: 24px;
-      padding: 12px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999;
+    }
+    .toast-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
       border-radius: var(--radius);
-      background: rgba(34,197,94,0.15);
-      border: 1px solid rgba(34,197,94,0.3);
-      color: var(--success);
       font-size: 13px;
       font-weight: 600;
-      animation: slideIn 0.25s ease;
-      z-index: 999;
+      animation: toastIn 0.25s ease;
+      min-width: 240px;
+      max-width: 380px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     }
-    @keyframes slideIn {
-      from { transform: translateY(16px); opacity: 0; }
-      to   { transform: translateY(0);   opacity: 1; }
+    .toast-item.success {
+      background: rgba(34,197,94,0.15);
+      border: 1px solid rgba(34,197,94,0.35);
+      color: var(--success);
+    }
+    .toast-item.error {
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.35);
+      color: var(--destructive);
+    }
+    .toast-item.info {
+      background: rgba(37,99,235,0.15);
+      border: 1px solid rgba(37,99,235,0.35);
+      color: #60A5FA;
+    }
+    @keyframes toastIn {
+      from { transform: translateX(24px); opacity: 0; }
+      to   { transform: translateX(0);   opacity: 1; }
     }
 
-    /* Responsive */
+    /* ── CAN Monitor ── */
+    .can-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .can-filter-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      width: 140px;
+    }
+    .can-filter-input:focus { outline: none; border-color: var(--primary); }
+    .can-filter-input::placeholder { color: var(--muted); }
+    .can-status {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .can-frames-wrap {
+      max-height: 420px;
+      overflow-y: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    .hex-byte {
+      display: inline-block;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      margin: 0 1px;
+    }
+    .hex-b0 { background: rgba(37,99,235,0.18); color: #93C5FD; }
+    .hex-b1 { background: rgba(14,165,233,0.18); color: #7DD3FC; }
+    .hex-b2 { background: rgba(34,197,94,0.18); color: #86EFAC; }
+    .hex-b3 { background: rgba(245,158,11,0.18); color: #FCD34D; }
+
+    /* ── UDS Console ── */
+    .uds-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .uds-section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 16px;
+    }
+    .uds-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .uds-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .uds-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+    .uds-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .uds-input:focus { outline: none; border-color: var(--primary); }
+    .uds-select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .uds-select:focus { outline: none; border-color: var(--primary); }
+
+    .uds-log {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      max-height: 280px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    .uds-log-entry {
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(30,45,69,0.5);
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 12px;
+    }
+    .uds-log-entry:last-child { border-bottom: none; }
+    .uds-log-time { color: var(--muted); }
+
+    /* ── Form grid ── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+    }
+
+    /* ── Logs tab ── */
+    .sessions-table-wrap {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      padding: 16px 24px;
+      font-size: 11px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .footer a { color: var(--secondary); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* ── Responsive ── */
+    @media (max-width: 1023px) {
+      .gauges-grid { grid-template-columns: repeat(2, 1fr); }
+      .header { padding: 12px 20px; }
+      .main { padding: 20px 16px; }
+      .card { padding: 18px 20px; }
+    }
     @media (max-width: 700px) {
-      .gauges-row { grid-template-columns: 1fr; }
-      .header { padding: 14px 16px; }
-      .main { padding: 20px 14px; }
+      .gauges-grid { grid-template-columns: 1fr 1fr; }
+      .tabs-nav { padding: 0 12px; }
+      .tab-btn { padding: 10px 12px; font-size: 12px; }
+    }
+    @media (max-width: 500px) {
+      .gauges-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -314,87 +585,109 @@
   <script type="text/javascript">
   (function() {
     'use strict';
-
     var h = React.createElement;
 
-    /* ─────────────────────────────────────────
-       ConnectionStatus
-    ───────────────────────────────────────── */
-    function ConnectionStatus(props) {
-      var connected = props.connected;
-      return h('div', {
-        className: 'conn-badge ' + (connected ? 'connected' : 'disconnected')
-      },
-        h('div', { className: 'conn-dot' }),
-        connected ? 'Conectado' : 'Desconectado'
+    /* ═══════════════════════════════════════════
+       TOAST SYSTEM (global)
+    ═══════════════════════════════════════════ */
+    var _toastListeners = [];
+    var _toastId = 0;
+    function addToast(msg, type) {
+      var id = ++_toastId;
+      _toastListeners.forEach(function(fn) { fn({ id: id, msg: msg, type: type || 'info' }); });
+    }
+
+    function ToastContainer() {
+      var stateArr = React.useState([]);
+      var toasts = stateArr[0];
+      var setToasts = stateArr[1];
+
+      React.useEffect(function() {
+        function handler(t) {
+          setToasts(function(prev) { return prev.concat(t); });
+          setTimeout(function() {
+            setToasts(function(prev) { return prev.filter(function(x) { return x.id !== t.id; }); });
+          }, 3200);
+        }
+        _toastListeners.push(handler);
+        return function() {
+          _toastListeners = _toastListeners.filter(function(fn) { return fn !== handler; });
+        };
+      }, []);
+
+      return h('div', { className: 'toast-container' },
+        toasts.map(function(t) {
+          var icon = t.type === 'success' ? '✓' : t.type === 'error' ? '✕' : 'ℹ';
+          return h('div', { key: t.id, className: 'toast-item ' + t.type },
+            icon, ' ', t.msg
+          );
+        })
       );
     }
 
-    /* ─────────────────────────────────────────
-       GaugeDial
-       props: label, unit, value, min, max, warn
-    ───────────────────────────────────────── */
-    function GaugeDial(props) {
-      var label = props.label;
-      var unit  = props.unit;
-      var value = props.value != null ? props.value : 0;
-      var min   = props.min != null ? props.min : 0;
-      var max   = props.max != null ? props.max : 100;
-      var warn  = props.warn;        // threshold for red color
+    /* ═══════════════════════════════════════════
+       CONNECTION STATUS
+    ═══════════════════════════════════════════ */
+    function ConnectionStatus(props) {
+      return h('div', {
+        className: 'conn-badge ' + (props.connected ? 'connected' : 'disconnected')
+      },
+        h('div', { className: 'conn-dot' }),
+        props.connected ? 'Conectado' : 'Desconectado'
+      );
+    }
 
-      var SIZE   = 160;
-      var CX     = SIZE / 2;
-      var CY     = SIZE / 2;
-      var R      = 60;
-      // Arc spans 240 degrees (from 150° to 30°, going clockwise)
+    /* ═══════════════════════════════════════════
+       GAUGE DIAL (SVG)
+       props: label, unit, value, min, max, warn, lastUpdate
+    ═══════════════════════════════════════════ */
+    function GaugeDial(props) {
+      var label      = props.label;
+      var unit       = props.unit;
+      var value      = props.value != null ? props.value : 0;
+      var min        = props.min != null ? props.min : 0;
+      var max        = props.max != null ? props.max : 100;
+      var warn       = props.warn;
+      var lastUpdate = props.lastUpdate;
+
+      var SIZE = 140, CX = SIZE / 2, CY = SIZE / 2, R = 52;
       var ARC_DEG = 240;
       var circumference = 2 * Math.PI * R;
       var arcLength = (ARC_DEG / 360) * circumference;
-
       var pct = Math.min(1, Math.max(0, (value - min) / (max - min)));
       var filled = pct * arcLength;
-
-      // Convert degrees to radians, offset so 0% = bottom-left (150° from top)
-      var startAngle = 150; // degrees from 12 o'clock
-      var endAngle   = 150 + ARC_DEG;
+      var startAngle = 150;
 
       function polarToXY(angleDeg, r) {
         var rad = (angleDeg - 90) * Math.PI / 180;
-        return {
-          x: CX + r * Math.cos(rad),
-          y: CY + r * Math.sin(rad)
-        };
+        return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) };
       }
-
       function describeArc(startDeg, sweepDeg, r) {
         var start = polarToXY(startDeg, r);
         var end   = polarToXY(startDeg + sweepDeg, r);
         var largeArc = sweepDeg > 180 ? 1 : 0;
-        return [
-          'M', start.x, start.y,
-          'A', r, r, 0, largeArc, 1, end.x, end.y
-        ].join(' ');
+        return ['M', start.x, start.y, 'A', r, r, 0, largeArc, 1, end.x, end.y].join(' ');
       }
 
       var isHigh = warn != null && value > warn;
       var activeColor = isHigh ? '#EF4444' : '#2563EB';
       var glowColor   = isHigh ? 'rgba(239,68,68,0.35)' : 'rgba(37,99,235,0.35)';
+      var displayVal  = Number.isFinite(value) ? Math.round(value) : '--';
+      var filterId    = 'glow-' + label.replace(/\W+/g, '');
 
-      // Format display value
-      var displayVal = Number.isFinite(value) ? Math.round(value) : '--';
-
-      var filterId = 'glow-' + label.replace(/\s+/g, '');
+      var tsText = '';
+      if (lastUpdate) {
+        var d = new Date(lastUpdate);
+        tsText = d.getHours().toString().padStart(2,'0') + ':' +
+                 d.getMinutes().toString().padStart(2,'0') + ':' +
+                 d.getSeconds().toString().padStart(2,'0');
+      }
 
       return h('div', { className: 'gauge-card' },
-        h('svg', {
-          className: 'gauge-svg',
-          width: SIZE,
-          height: SIZE,
-          viewBox: '0 0 ' + SIZE + ' ' + SIZE
-        },
+        h('svg', { className: 'gauge-svg', width: SIZE, height: SIZE, viewBox: '0 0 ' + SIZE + ' ' + SIZE },
           h('defs', null,
             h('filter', { id: filterId, x: '-30%', y: '-30%', width: '160%', height: '160%' },
-              h('feGaussianBlur', { stdDeviation: '3', result: 'blur' }),
+              h('feGaussianBlur', { stdDeviation: '2.5', result: 'blur' }),
               h('feFlood', { 'flood-color': glowColor, result: 'color' }),
               h('feComposite', { in: 'color', in2: 'blur', operator: 'in', result: 'shadow' }),
               h('feMerge', null,
@@ -403,126 +696,110 @@
               )
             )
           ),
-
-          // Background track arc
-          h('path', {
-            d: describeArc(startAngle, ARC_DEG, R),
-            fill: 'none',
-            stroke: '#1E2D45',
-            strokeWidth: 10,
-            strokeLinecap: 'round'
-          }),
-
-          // Filled arc (progress) — drawn as a dashed stroke trick
+          h('path', { d: describeArc(startAngle, ARC_DEG, R), fill: 'none', stroke: '#1E2D45', strokeWidth: 9, strokeLinecap: 'round' }),
           pct > 0 && h('path', {
             d: describeArc(startAngle, ARC_DEG, R),
             fill: 'none',
             stroke: activeColor,
-            strokeWidth: 10,
+            strokeWidth: 9,
             strokeLinecap: 'round',
             strokeDasharray: arcLength,
             strokeDashoffset: arcLength - filled,
             filter: 'url(#' + filterId + ')',
             style: { transition: 'stroke-dashoffset 0.4s ease, stroke 0.4s ease' }
           }),
-
-          // Tick mark at current position
           pct > 0 && (function() {
             var tickAngle = startAngle + pct * ARC_DEG;
-            var outer = polarToXY(tickAngle, R + 8);
-            var inner = polarToXY(tickAngle, R - 8);
-            return h('line', {
-              x1: inner.x, y1: inner.y,
-              x2: outer.x, y2: outer.y,
-              stroke: activeColor,
-              strokeWidth: 3,
-              strokeLinecap: 'round'
-            });
+            var outer = polarToXY(tickAngle, R + 7);
+            var inner = polarToXY(tickAngle, R - 7);
+            return h('line', { x1: inner.x, y1: inner.y, x2: outer.x, y2: outer.y, stroke: activeColor, strokeWidth: 2.5, strokeLinecap: 'round' });
           })(),
-
-          // Center value
           h('text', {
-            x: CX,
-            y: CY + 6,
-            textAnchor: 'middle',
-            dominantBaseline: 'middle',
+            x: CX, y: CY + 5,
+            textAnchor: 'middle', dominantBaseline: 'middle',
             fill: isHigh ? '#EF4444' : '#E5EAF2',
-            fontSize: 26,
-            fontWeight: 700,
+            fontSize: 22, fontWeight: 700,
             fontFamily: "'JetBrains Mono', monospace",
             style: { transition: 'fill 0.4s ease' }
           }, displayVal)
         ),
-
         h('div', { className: 'gauge-label' },
           h('div', { className: 'gauge-name' }, label),
           h('div', { className: 'gauge-unit' }, unit)
-        )
+        ),
+        h('div', { className: 'gauge-ts' }, tsText || '--:--:--')
       );
     }
 
-    /* ─────────────────────────────────────────
-       Dashboard — 3 gauges via WebSocket
-    ───────────────────────────────────────── */
+    /* ═══════════════════════════════════════════
+       DASHBOARD TAB — 6 gauges via WebSocket
+    ═══════════════════════════════════════════ */
+    var GAUGES_CONFIG = [
+      { key: 'rpm',           label: 'RPM',             unit: 'rev/min',  min: 0, max: 6000, warn: 4000 },
+      { key: 'speed',         label: 'Velocidad',        unit: 'km/h',     min: 0, max: 220,  warn: null  },
+      { key: 'coolant_temp',  label: 'Temp Refrigerante',unit: '°C',       min: 0, max: 120,  warn: 95   },
+      { key: 'engine_load',   label: 'Carga Motor',      unit: '%',        min: 0, max: 100,  warn: 90   },
+      { key: 'throttle',      label: 'Mariposa',         unit: '%',        min: 0, max: 100,  warn: null  },
+      { key: 'intake_temp',   label: 'Temp Admisión',    unit: '°C',       min: 0, max: 120,  warn: 50   }
+    ];
+
     function Dashboard(props) {
       var onConnectionChange = props.onConnectionChange;
+      var onFpsChange        = props.onFpsChange;
 
-      var initialPids = { rpm: 0, speed: 0, coolant_temp: 0 };
-      var pidState = React.useState(initialPids);
-      var pids = pidState[0];
-      var setPids = pidState[1];
+      var initialPids = { rpm: 0, speed: 0, coolant_temp: 0, engine_load: 0, throttle: 0, intake_temp: 0 };
+      var pidsArr = React.useState(initialPids);
+      var pids = pidsArr[0], setPids = pidsArr[1];
 
-      var connState = React.useState(false);
-      var connected = connState[0];
-      var setConnected = connState[1];
+      var tsArr = React.useState({});
+      var timestamps = tsArr[0], setTimestamps = tsArr[1];
+
+      var fpsRef = React.useRef({ count: 0, last: Date.now() });
 
       React.useEffect(function() {
-        var ws;
-        var reconnectTimer;
-        var dead = false;
+        var ws, reconnectTimer, dead = false;
 
         function connect() {
           if (dead) return;
-          try {
-            ws = new WebSocket('ws://127.0.0.1:8000/ws/live');
-          } catch(e) {
-            scheduleReconnect();
-            return;
-          }
+          try { ws = new WebSocket('ws://127.0.0.1:8000/ws/live'); }
+          catch(e) { scheduleReconnect(); return; }
 
           ws.onopen = function() {
-            setConnected(true);
             if (onConnectionChange) onConnectionChange(true);
+            addToast('WebSocket conectado', 'success');
           };
-
           ws.onmessage = function(event) {
             try {
               var data = JSON.parse(event.data);
-              setPids(function(prev) {
-                return Object.assign({}, prev, data);
+              var now = Date.now();
+              var fr = fpsRef.current;
+              fr.count++;
+              if (now - fr.last >= 1000) {
+                if (onFpsChange) onFpsChange(fr.count);
+                fr.count = 0;
+                fr.last = now;
+              }
+              setPids(function(prev) { return Object.assign({}, prev, data); });
+              setTimestamps(function(prev) {
+                var next = Object.assign({}, prev);
+                Object.keys(data).forEach(function(k) { next[k] = now; });
+                return next;
               });
-            } catch(e) { /* ignore parse errors */ }
+            } catch(e) {}
           };
-
           ws.onclose = function() {
-            setConnected(false);
             if (onConnectionChange) onConnectionChange(false);
             scheduleReconnect();
           };
-
           ws.onerror = function() {
-            setConnected(false);
             if (onConnectionChange) onConnectionChange(false);
           };
         }
-
         function scheduleReconnect() {
           if (dead) return;
           reconnectTimer = setTimeout(connect, 3000);
         }
-
         connect();
-
         return function() {
           dead = true;
           clearTimeout(reconnectTimer);
@@ -532,130 +809,79 @@
 
       return h('div', null,
         h('div', { className: 'section-label' }, 'Telemetría en tiempo real'),
-        h('div', { className: 'gauges-row' },
-          h(GaugeDial, {
-            label: 'RPM',
-            unit: 'rev/min',
-            value: pids.rpm,
-            min: 0,
-            max: 6000,
-            warn: 4000
-          }),
-          h(GaugeDial, {
-            label: 'Velocidad',
-            unit: 'km/h',
-            value: pids.speed,
-            min: 0,
-            max: 220,
-            warn: null
-          }),
-          h(GaugeDial, {
-            label: 'Temp. Motor',
-            unit: '°C',
-            value: pids.coolant_temp,
-            min: 0,
-            max: 120,
-            warn: 95
+        h('div', { className: 'gauges-grid' },
+          GAUGES_CONFIG.map(function(cfg) {
+            return h(GaugeDial, {
+              key: cfg.key,
+              label: cfg.label,
+              unit: cfg.unit,
+              value: pids[cfg.key],
+              min: cfg.min,
+              max: cfg.max,
+              warn: cfg.warn,
+              lastUpdate: timestamps[cfg.key]
+            });
           })
         )
       );
     }
 
-    /* ─────────────────────────────────────────
-       DTCPanel
-    ───────────────────────────────────────── */
+    /* ═══════════════════════════════════════════
+       DTCs TAB
+    ═══════════════════════════════════════════ */
     function DTCPanel() {
-      var dtcState = React.useState(null);   // null = not loaded yet
-      var dtcs = dtcState[0];
-      var setDtcs = dtcState[1];
-
-      var loadingState = React.useState(false);
-      var loading = loadingState[0];
-      var setLoading = loadingState[1];
-
-      var errorState = React.useState(null);
-      var error = errorState[0];
-      var setError = errorState[1];
-
-      var toastState = React.useState(null);
-      var toast = toastState[0];
-      var setToast = toastState[1];
-
-      function showToast(msg) {
-        setToast(msg);
-        setTimeout(function() { setToast(null); }, 3000);
-      }
+      var dtcArr = React.useState(null);
+      var dtcs = dtcArr[0], setDtcs = dtcArr[1];
+      var loadArr = React.useState(false);
+      var loading = loadArr[0], setLoading = loadArr[1];
+      var errArr = React.useState(null);
+      var error = errArr[0], setError = errArr[1];
 
       function readDtcs() {
-        setLoading(true);
-        setError(null);
+        setLoading(true); setError(null);
         fetch('http://127.0.0.1:8000/dtc')
-          .then(function(r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-          })
-          .then(function(data) {
-            setDtcs(data.dtcs || []);
-            setLoading(false);
-          })
-          .catch(function(e) {
-            setError('Error al leer DTCs: ' + e.message);
-            setLoading(false);
-          });
+          .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function(data) { setDtcs(data.dtcs || []); setLoading(false); addToast('DTCs leídos correctamente', 'success'); })
+          .catch(function(e) { setError('Error al leer DTCs: ' + e.message); setLoading(false); addToast('Error al leer DTCs', 'error'); });
       }
 
       function clearDtcs() {
-        var ok = window.confirm('¿Seguro que deseas borrar todos los códigos de falla (DTCs)? Esta acción no se puede deshacer.');
-        if (!ok) return;
-
-        setLoading(true);
-        setError(null);
+        if (!window.confirm('¿Seguro que deseas borrar todos los DTCs? Esta acción no se puede deshacer.')) return;
+        setLoading(true); setError(null);
         fetch('http://127.0.0.1:8000/dtc', { method: 'DELETE' })
-          .then(function(r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-          })
+          .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
           .then(function(data) {
-            if (data.cleared) {
-              setDtcs([]);
-              showToast('Códigos de falla borrados correctamente');
-            }
+            if (data.cleared) { setDtcs([]); addToast('Códigos de falla borrados', 'success'); }
             setLoading(false);
           })
-          .catch(function(e) {
-            setError('Error al borrar DTCs: ' + e.message);
-            setLoading(false);
-          });
+          .catch(function(e) { setError('Error al borrar DTCs: ' + e.message); setLoading(false); addToast('Error al borrar', 'error'); });
       }
 
-      // Render DTC body
       var body;
-      if (dtcs === null) {
-        body = h('div', { className: 'dtc-empty' },
-          h('div', { className: 'dtc-empty-icon' }, '📋'),
+      if (loading) {
+        body = h('div', { style: { padding: '16px 0' } },
+          [0,1,2].map(function(i) { return h('div', { key: i, className: 'skeleton skeleton-row' }); })
+        );
+      } else if (dtcs === null) {
+        body = h('div', { className: 'empty-state' },
+          h('div', { className: 'empty-icon' }, '📋'),
           'Presiona "Leer DTCs" para obtener los códigos almacenados'
         );
-      } else if (loading) {
-        body = h('div', { className: 'dtc-loading' }, 'Consultando módulo ECU…');
       } else if (dtcs.length === 0) {
-        body = h('div', { className: 'dtc-empty' },
-          h('div', { className: 'dtc-empty-icon' }, '✅'),
-          'Sin códigos de falla'
+        body = h('div', { className: 'empty-state' },
+          h('div', { className: 'empty-icon' }, '✅'),
+          'Sin códigos de falla activos'
         );
       } else {
-        body = h('div', { className: 'dtc-table-wrap' },
-          h('table', { className: 'dtc-table' },
-            h('thead', null,
-              h('tr', null,
-                h('th', null, 'Código'),
-                h('th', null, 'Estado')
-              )
-            ),
+        body = h('div', { className: 'table-wrap' },
+          h('table', { className: 'data-table' },
+            h('thead', null, h('tr', null, h('th', null, 'Código'), h('th', null, 'Estado'), h('th', null, 'Descripción'))),
             h('tbody', null,
               dtcs.map(function(code) {
                 return h('tr', { key: code },
-                  h('td', null, h('span', { className: 'dtc-code' }, code)),
-                  h('td', null, h('span', { className: 'dtc-badge' }, '● Activo'))
+                  h('td', null, h('span', { className: 'mono text-blue' }, code)),
+                  h('td', null, h('span', { className: 'dtc-badge' }, '● Activo')),
+                  h('td', { className: 'text-muted' }, 'Consultar manual del vehículo')
                 );
               })
             )
@@ -663,60 +889,569 @@
         );
       }
 
-      return h('div', null,
-        h('div', { className: 'dtc-card' },
-          h('div', { className: 'dtc-header' },
-            h('div', { className: 'dtc-title' }, 'Códigos de Falla (DTC)'),
-            h('div', { className: 'dtc-actions' },
-              h('button', {
-                className: 'btn btn-primary',
-                onClick: readDtcs,
-                disabled: loading
-              }, loading ? 'Leyendo…' : '🔍 Leer DTCs'),
-              h('button', {
-                className: 'btn btn-danger',
-                onClick: clearDtcs,
-                disabled: loading || dtcs === null
-              }, '🗑 Borrar DTCs')
-            )
-          ),
-          body,
-          error && h('div', { className: 'dtc-error' }, error)
+      return h('div', { className: 'card' },
+        h('div', { className: 'card-header' },
+          h('div', { className: 'card-title' }, '🔍 Códigos de Falla (DTC)'),
+          h('div', { className: 'card-actions' },
+            h('button', { className: 'btn btn-primary', onClick: readDtcs, disabled: loading }, loading ? 'Leyendo…' : '🔍 Leer DTCs'),
+            h('button', { className: 'btn btn-danger', onClick: clearDtcs, disabled: loading || dtcs === null }, '🗑 Borrar DTCs')
+          )
         ),
-
-        toast && h('div', { className: 'toast' }, '✓ ' + toast)
+        body,
+        error && h('div', { className: 'error-box' }, error)
       );
     }
 
-    /* ─────────────────────────────────────────
-       App root
-    ───────────────────────────────────────── */
-    function App() {
-      var connState = React.useState(false);
-      var connected = connState[0];
-      var setConnected = connState[1];
+    /* ═══════════════════════════════════════════
+       CAN MONITOR TAB
+    ═══════════════════════════════════════════ */
+    function CANMonitor() {
+      var framesArr = React.useState([]);
+      var frames = framesArr[0], setFrames = framesArr[1];
+      var capturingArr = React.useState(false);
+      var capturing = capturingArr[0], setCapturing = capturingArr[1];
+      var filterArr = React.useState('');
+      var filter = filterArr[0], setFilter = filterArr[1];
+      var unavailableArr = React.useState(false);
+      var unavailable = unavailableArr[0], setUnavailable = unavailableArr[1];
+      var intervalRef = React.useRef(null);
+
+      var MAX_FRAMES = 200;
+
+      function fetchFrames() {
+        fetch('http://127.0.0.1:8000/can/frames')
+          .then(function(r) {
+            if (r.status === 404) { setUnavailable(true); setCapturing(false); return null; }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function(data) {
+            if (!data) return;
+            if (data.frames) {
+              setFrames(function(prev) {
+                var next = prev.concat(data.frames);
+                if (next.length > MAX_FRAMES) next = next.slice(next.length - MAX_FRAMES);
+                return next;
+              });
+            }
+          })
+          .catch(function(e) {
+            setUnavailable(true);
+            setCapturing(false);
+          });
+      }
+
+      function startCapture() {
+        setCapturing(true);
+        setUnavailable(false);
+        fetchFrames();
+        intervalRef.current = setInterval(fetchFrames, 1000);
+        addToast('CAN Monitor iniciado', 'info');
+      }
+      function stopCapture() {
+        setCapturing(false);
+        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+        addToast('Captura pausada', 'info');
+      }
+
+      React.useEffect(function() {
+        return function() { if (intervalRef.current) clearInterval(intervalRef.current); };
+      }, []);
+
+      function exportASC() {
+        var lines = ['date ' + new Date().toUTCString(), 'base hex timestamps absolute', ''];
+        var filtered = getFiltered();
+        filtered.forEach(function(f) {
+          var dataStr = (f.data || []).join(' ');
+          lines.push(f.timestamp + ' ' + f.channel + ' ' + f.id + ' Rx d ' + (f.dlc || 0) + ' ' + dataStr);
+        });
+        var blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'can_capture_' + Date.now() + '.asc'; a.click();
+        URL.revokeObjectURL(url);
+        addToast('Exportado .asc correctamente', 'success');
+      }
+
+      function getFiltered() {
+        if (!filter.trim()) return frames;
+        var f = filter.trim().toUpperCase();
+        return frames.filter(function(fr) { return (fr.id || '').toUpperCase().includes(f); });
+      }
+
+      function renderHexBytes(data) {
+        if (!data || data.length === 0) return h('span', { className: 'text-muted' }, '--');
+        var colors = ['hex-b0','hex-b1','hex-b2','hex-b3'];
+        return h('span', null,
+          data.map(function(byte, i) {
+            return h('span', { key: i, className: 'hex-byte ' + colors[i % 4] }, byte);
+          })
+        );
+      }
+
+      var filtered = getFiltered();
+
+      if (unavailable) {
+        return h('div', { className: 'card' },
+          h('div', { className: 'card-header' }, h('div', { className: 'card-title' }, '📡 CAN Monitor')),
+          h('div', { className: 'info-box' },
+            'ℹ️  CAN Monitor disponible con hardware real. Conecta un adaptador ELM327 o SocketCAN para capturar tramas.'
+          )
+        );
+      }
+
+      return h('div', { className: 'card' },
+        h('div', { className: 'card-header' },
+          h('div', { className: 'card-title' }, '📡 CAN Monitor'),
+          h('div', { className: 'card-actions' },
+            !capturing
+              ? h('button', { className: 'btn btn-success', onClick: startCapture }, '▶ Capturar')
+              : h('button', { className: 'btn btn-ghost', onClick: stopCapture }, '⏸ Pausar'),
+            h('button', { className: 'btn btn-ghost', onClick: exportASC, disabled: frames.length === 0 }, '💾 Exportar .asc')
+          )
+        ),
+        h('div', { className: 'can-toolbar' },
+          h('label', { style: { fontSize: '12px', color: 'var(--muted)', marginRight: '4px' } }, 'Filtro ID:'),
+          h('input', {
+            className: 'can-filter-input',
+            type: 'text',
+            placeholder: 'ej: 7E8',
+            value: filter,
+            onChange: function(e) { setFilter(e.target.value); }
+          }),
+          h('span', { className: 'can-status' },
+            filtered.length + ' tramas' + (filter ? ' filtradas' : '') + ' / ' + frames.length + ' total'
+          )
+        ),
+        frames.length === 0
+          ? h('div', { className: 'empty-state' },
+              h('div', { className: 'empty-icon' }, '📡'),
+              capturing ? 'Esperando tramas CAN…' : 'Presiona ▶ Capturar para iniciar'
+            )
+          : h('div', { className: 'can-frames-wrap' },
+              h('table', { className: 'data-table' },
+                h('thead', null,
+                  h('tr', null,
+                    h('th', null, 'Timestamp'),
+                    h('th', null, 'ID'),
+                    h('th', null, 'DLC'),
+                    h('th', null, 'Data'),
+                    h('th', null, 'Señal')
+                  )
+                ),
+                h('tbody', null,
+                  filtered.slice(-200).map(function(fr, i) {
+                    return h('tr', { key: i },
+                      h('td', { className: 'mono text-muted' }, fr.timestamp || '--'),
+                      h('td', { className: 'mono text-blue' }, fr.id || '--'),
+                      h('td', { className: 'mono' }, fr.dlc != null ? fr.dlc : '--'),
+                      h('td', null, renderHexBytes(fr.data)),
+                      h('td', { className: 'text-muted' }, fr.signal || '')
+                    );
+                  })
+                )
+              )
+            )
+      );
+    }
+
+    /* ═══════════════════════════════════════════
+       UDS CONSOLE TAB
+    ═══════════════════════════════════════════ */
+    function UDSConsole() {
+      // Session state
+      var vinArr = React.useState('');
+      var vin = vinArr[0], setVin = vinArr[1];
+      var transportArr = React.useState('sim');
+      var transport = transportArr[0], setTransport = transportArr[1];
+      var sessionIdArr = React.useState('');
+      var sessionId = sessionIdArr[0], setSessionId = sessionIdArr[1];
+      var sessionBusyArr = React.useState(false);
+      var sessionBusy = sessionBusyArr[0], setSessionBusy = sessionBusyArr[1];
+
+      // Read DID state
+      var didReadArr = React.useState('F190');
+      var didRead = didReadArr[0], setDidRead = didReadArr[1];
+      var didResultArr = React.useState('');
+      var didResult = didResultArr[0], setDidResult = didResultArr[1];
+      var didBusyArr = React.useState(false);
+      var didBusy = didBusyArr[0], setDidBusy = didBusyArr[1];
+
+      // Backup/Write state
+      var ecuAddrArr = React.useState('7E0');
+      var ecuAddr = ecuAddrArr[0], setEcuAddr = ecuAddrArr[1];
+      var didWriteArr = React.useState('');
+      var didWrite = didWriteArr[0], setDidWrite = didWriteArr[1];
+      var backupIdArr = React.useState('');
+      var backupId = backupIdArr[0], setBackupId = backupIdArr[1];
+      var backupHashArr = React.useState('');
+      var backupHash = backupHashArr[0], setBackupHash = backupHashArr[1];
+      var writeDataArr = React.useState('');
+      var writeData = writeDataArr[0], setWriteData = writeDataArr[1];
+      var backupBusyArr = React.useState(false);
+      var backupBusy = backupBusyArr[0], setBackupBusy = backupBusyArr[1];
+      var writeBusyArr = React.useState(false);
+      var writeBusy = writeBusyArr[0], setWriteBusy = writeBusyArr[1];
+      var zeroBrickErrorArr = React.useState(false);
+      var zeroBrickError = zeroBrickErrorArr[0], setZeroBrickError = zeroBrickErrorArr[1];
+
+      // Operation log
+      var logArr = React.useState([]);
+      var opLog = logArr[0], setOpLog = logArr[1];
+
+      function addLog(type, msg) {
+        var entry = { time: new Date().toLocaleTimeString(), type: type, msg: msg };
+        setOpLog(function(prev) {
+          var next = [entry].concat(prev);
+          return next.slice(0, 20);
+        });
+      }
+
+      function BASE() { return 'http://127.0.0.1:8000'; }
+
+      function createSession() {
+        setSessionBusy(true);
+        fetch(BASE() + '/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vin: vin, transport: transport })
+        })
+          .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function(data) {
+            setSessionId(data.session_id || data.id || '');
+            setSessionBusy(false);
+            addLog('SESSION', 'Sesión creada: ' + (data.session_id || data.id));
+            addToast('Sesión UDS creada', 'success');
+          })
+          .catch(function(e) {
+            setSessionBusy(false);
+            addLog('ERROR', 'Crear sesión: ' + e.message);
+            addToast('Error al crear sesión: ' + e.message, 'error');
+          });
+      }
+
+      function readDID() {
+        if (!sessionId) { addToast('Crea una sesión primero', 'error'); return; }
+        setDidBusy(true); setDidResult('');
+        fetch(BASE() + '/session/' + sessionId + '/uds/read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ did: didRead })
+        })
+          .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function(data) {
+            setDidResult(data.data_hex || JSON.stringify(data));
+            setDidBusy(false);
+            addLog('READ', 'DID ' + didRead + ' → ' + (data.data_hex || ''));
+            addToast('DID leído correctamente', 'success');
+          })
+          .catch(function(e) {
+            setDidBusy(false);
+            addLog('ERROR', 'Leer DID: ' + e.message);
+            addToast('Error al leer DID: ' + e.message, 'error');
+          });
+      }
+
+      function takeBackup() {
+        if (!sessionId) { addToast('Crea una sesión primero', 'error'); return; }
+        setBackupBusy(true); setBackupId(''); setBackupHash(''); setZeroBrickError(false);
+        fetch(BASE() + '/session/' + sessionId + '/uds/backup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ecu_addr: ecuAddr, did: didWrite })
+        })
+          .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function(data) {
+            var bid = data.backup_id || data.id || '';
+            var sha = data.sha256 || '';
+            setBackupId(bid);
+            setBackupHash(sha);
+            setBackupBusy(false);
+            addLog('BACKUP', 'Backup ' + bid + ' SHA256: ' + sha.substring(0, 16) + '…');
+            addToast('Backup completado: ' + bid, 'success');
+          })
+          .catch(function(e) {
+            setBackupBusy(false);
+            addLog('ERROR', 'Backup: ' + e.message);
+            addToast('Error en backup: ' + e.message, 'error');
+          });
+      }
+
+      function writeDID() {
+        if (!sessionId) { addToast('Crea una sesión primero', 'error'); return; }
+        if (!backupId) { addToast('Toma un backup verificado primero', 'error'); return; }
+        if (!window.confirm('⚠️ ¿Confirmas la escritura en la ECU? Esta operación puede ser irreversible si algo falla.')) return;
+        setWriteBusy(true); setZeroBrickError(false);
+        fetch(BASE() + '/session/' + sessionId + '/uds/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ did: didWrite, data_hex: writeData, backup_id: backupId })
+        })
+          .then(function(r) {
+            if (r.status === 409) { setZeroBrickError(true); setWriteBusy(false); addLog('BLOCKED', 'Zero-Brick bloqueado'); addToast('BLOQUEADO: Zero-Brick activo', 'error'); return null; }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function(data) {
+            if (!data) return;
+            setWriteBusy(false);
+            addLog('WRITE', 'DID ' + didWrite + ' escrito OK. Backup: ' + backupId);
+            addToast('Escritura completada', 'success');
+          })
+          .catch(function(e) {
+            setWriteBusy(false);
+            addLog('ERROR', 'Escribir: ' + e.message);
+            addToast('Error al escribir: ' + e.message, 'error');
+          });
+      }
 
       return h('div', null,
-        // Header
+        /* ── Session Section ── */
+        h('div', { className: 'uds-section' },
+          h('div', { className: 'uds-section-title' }, '① Crear Sesión UDS'),
+          h('div', { className: 'uds-row' },
+            h('div', { className: 'uds-field', style: { flex: '1', minWidth: '180px' } },
+              h('label', { className: 'uds-label' }, 'VIN'),
+              h('input', { className: 'uds-input', type: 'text', placeholder: 'WBA123456789', value: vin, onChange: function(e) { setVin(e.target.value); }, style: { width: '100%' } })
+            ),
+            h('div', { className: 'uds-field' },
+              h('label', { className: 'uds-label' }, 'Transport'),
+              h('select', { className: 'uds-select', value: transport, onChange: function(e) { setTransport(e.target.value); } },
+                h('option', { value: 'sim' }, 'Simulado'),
+                h('option', { value: 'elm327' }, 'ELM327'),
+                h('option', { value: 'socketcan' }, 'SocketCAN')
+              )
+            ),
+            h('div', { className: 'uds-field' },
+              h('label', { className: 'uds-label' }, ' '),
+              h('button', { className: 'btn btn-primary', onClick: createSession, disabled: sessionBusy }, sessionBusy ? 'Conectando…' : '🔌 Crear Sesión')
+            )
+          ),
+          sessionId && h('div', { className: 'success-box', style: { marginTop: '14px' } },
+            '✓ Session ID: ' + sessionId
+          )
+        ),
+
+        /* ── Read DID Section ── */
+        h('div', { className: 'uds-section' },
+          h('div', { className: 'uds-section-title' }, '② Leer DID'),
+          h('div', { className: 'uds-row' },
+            h('div', { className: 'uds-field' },
+              h('label', { className: 'uds-label' }, 'DID (hex)'),
+              h('input', { className: 'uds-input', type: 'text', placeholder: 'F190', value: didRead, onChange: function(e) { setDidRead(e.target.value); }, style: { width: '110px' } })
+            ),
+            h('div', { className: 'uds-field' },
+              h('label', { className: 'uds-label' }, ' '),
+              h('button', { className: 'btn btn-primary', onClick: readDID, disabled: didBusy || !sessionId }, didBusy ? 'Leyendo…' : '📖 Leer DID')
+            )
+          ),
+          didResult && h('div', { className: 'success-box', style: { marginTop: '14px' } },
+            '→ ' + didResult
+          )
+        ),
+
+        /* ── Backup + Write Section ── */
+        h('div', { className: 'uds-section' },
+          h('div', { className: 'uds-section-title' }, '③ Backup + Escritura (Zero-Brick Protection)'),
+          h('div', { className: 'form-grid', style: { marginBottom: '14px' } },
+            h('div', { className: 'uds-field' },
+              h('label', { className: 'uds-label' }, 'ECU Addr (hex)'),
+              h('input', { className: 'uds-input', type: 'text', placeholder: '7E0', value: ecuAddr, onChange: function(e) { setEcuAddr(e.target.value); } })
+            ),
+            h('div', { className: 'uds-field' },
+              h('label', { className: 'uds-label' }, 'DID (hex)'),
+              h('input', { className: 'uds-input', type: 'text', placeholder: 'F190', value: didWrite, onChange: function(e) { setDidWrite(e.target.value); } })
+            )
+          ),
+          h('button', { className: 'btn btn-success', onClick: takeBackup, disabled: backupBusy || !sessionId, style: { marginBottom: '14px' } },
+            backupBusy ? 'Tomando backup…' : '📦 Tomar Backup'
+          ),
+          backupId && h('div', { className: 'success-box', style: { marginBottom: '14px' } },
+            '✓ Backup ID: ' + backupId + '\n  SHA256: ' + backupHash
+          ),
+          h('div', { className: 'form-grid', style: { marginBottom: '14px' } },
+            h('div', { className: 'uds-field' },
+              h('label', { className: 'uds-label' }, 'Data Hex'),
+              h('input', { className: 'uds-input', type: 'text', placeholder: 'DEADBEEF', value: writeData, onChange: function(e) { setWriteData(e.target.value); } })
+            ),
+            h('div', { className: 'uds-field' },
+              h('label', { className: 'uds-label' }, 'Backup ID'),
+              h('input', { className: 'uds-input', type: 'text', value: backupId, readOnly: true, style: { opacity: 0.7 } })
+            )
+          ),
+          h('button', {
+            className: 'btn btn-danger',
+            onClick: writeDID,
+            disabled: writeBusy || !sessionId || !backupId
+          }, writeBusy ? 'Escribiendo…' : '✏️ Escribir en ECU'),
+          zeroBrickError && h('div', { className: 'error-box', style: { marginTop: '12px' } },
+            '🚫 BLOQUEADO: Zero-Brick — no se puede escribir sin un backup verificado previo. Toma un backup antes de continuar.'
+          )
+        ),
+
+        /* ── Operation Log ── */
+        h('div', { className: 'uds-section' },
+          h('div', { className: 'uds-section-title' }, '📜 Log de Operaciones UDS'),
+          opLog.length === 0
+            ? h('div', { className: 'text-muted', style: { fontSize: '13px' } }, 'Sin operaciones aún.')
+            : h('div', { className: 'uds-log' },
+                opLog.map(function(entry, i) {
+                  return h('div', { key: i, className: 'uds-log-entry' },
+                    h('span', { className: 'uds-log-time' }, entry.time),
+                    h('span', { className: entry.type === 'ERROR' || entry.type === 'BLOCKED' ? 'text-red' : entry.type === 'BACKUP' ? 'text-warn' : 'text-green' },
+                      '[' + entry.type + '] ' + entry.msg
+                    )
+                  );
+                })
+              )
+        )
+      );
+    }
+
+    /* ═══════════════════════════════════════════
+       LOGS TAB — Session History
+    ═══════════════════════════════════════════ */
+    function LogsPanel() {
+      var sessionsArr = React.useState(null);
+      var sessions = sessionsArr[0], setSessions = sessionsArr[1];
+      var loadingArr = React.useState(true);
+      var loading = loadingArr[0], setLoading = loadingArr[1];
+
+      React.useEffect(function() {
+        setLoading(true);
+        fetch('http://127.0.0.1:8000/session/list')
+          .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function(data) { setSessions(data.sessions || data || []); setLoading(false); })
+          .catch(function() {
+            // Fallback: read from localStorage
+            try {
+              var stored = JSON.parse(localStorage.getItem('autodiag_sessions') || '[]');
+              setSessions(stored);
+            } catch(e) { setSessions([]); }
+            setLoading(false);
+          });
+      }, []);
+
+      if (loading) {
+        return h('div', { className: 'card' },
+          h('div', { className: 'card-header' }, h('div', { className: 'card-title' }, '📋 Historial de Sesiones')),
+          h('div', { style: { padding: '8px 0' } },
+            [0,1,2].map(function(i) { return h('div', { key: i, className: 'skeleton skeleton-row' }); })
+          )
+        );
+      }
+
+      return h('div', { className: 'card' },
+        h('div', { className: 'card-header' },
+          h('div', { className: 'card-title' }, '📋 Historial de Sesiones'),
+          h('div', { className: 'text-muted', style: { fontSize: '12px' } }, sessions ? sessions.length + ' sesiones' : '')
+        ),
+        !sessions || sessions.length === 0
+          ? h('div', { className: 'empty-state' },
+              h('div', { className: 'empty-icon' }, '📋'),
+              'Sin sesiones registradas aún'
+            )
+          : h('div', { className: 'sessions-table-wrap' },
+              h('div', { className: 'table-wrap' },
+                h('table', { className: 'data-table' },
+                  h('thead', null,
+                    h('tr', null,
+                      h('th', null, 'ID'),
+                      h('th', null, 'Transport'),
+                      h('th', null, 'VIN'),
+                      h('th', null, 'Inicio'),
+                      h('th', null, 'N° DTCs'),
+                      h('th', null, 'N° Muestras')
+                    )
+                  ),
+                  h('tbody', null,
+                    sessions.map(function(s, i) {
+                      return h('tr', { key: s.id || i },
+                        h('td', { className: 'mono text-blue' }, s.id || '--'),
+                        h('td', { className: 'mono' }, s.transport || '--'),
+                        h('td', { className: 'mono' }, s.vin || '--'),
+                        h('td', { className: 'text-muted' }, s.started_at || s.created_at || '--'),
+                        h('td', null, s.dtc_count != null ? s.dtc_count : '--'),
+                        h('td', null, s.sample_count != null ? s.sample_count : '--')
+                      );
+                    })
+                  )
+                )
+              )
+            )
+      );
+    }
+
+    /* ═══════════════════════════════════════════
+       APP ROOT — Tab navigation
+    ═══════════════════════════════════════════ */
+    var TABS = [
+      { id: 'dashboard', label: 'Dashboard',    icon: '🏠' },
+      { id: 'dtcs',      label: 'DTCs',          icon: '🔍' },
+      { id: 'can',       label: 'CAN Monitor',   icon: '📡' },
+      { id: 'uds',       label: 'UDS Console',   icon: '🔧' },
+      { id: 'logs',      label: 'Logs',           icon: '📋' }
+    ];
+
+    function App() {
+      var connArr = React.useState(false);
+      var connected = connArr[0], setConnected = connArr[1];
+      var tabArr = React.useState('dashboard');
+      var activeTab = tabArr[0], setActiveTab = tabArr[1];
+      var fpsArr = React.useState(0);
+      var fps = fpsArr[0], setFps = fpsArr[1];
+
+      return h('div', { style: { display: 'flex', flexDirection: 'column', minHeight: '100vh' } },
+
+        /* Header */
         h('header', { className: 'header' },
           h('div', { className: 'header-brand' },
             h('span', null, '🔧'),
             'Auto-Diag Suite'
           ),
-          h(ConnectionStatus, { connected: connected })
+          h('div', { className: 'header-right' },
+            activeTab === 'dashboard' && h('div', { className: 'fps-badge ' + (fps > 0 ? 'active' : '') },
+              fps + ' fps WS'
+            ),
+            h(ConnectionStatus, { connected: connected })
+          )
         ),
 
-        // Main content
+        /* Tab Nav */
+        h('nav', { className: 'tabs-nav' },
+          TABS.map(function(tab) {
+            return h('button', {
+              key: tab.id,
+              className: 'tab-btn' + (activeTab === tab.id ? ' active' : ''),
+              onClick: function() { setActiveTab(tab.id); }
+            }, tab.icon, ' ', tab.label);
+          })
+        ),
+
+        /* Tab Content */
         h('main', { className: 'main' },
-          h(Dashboard, { onConnectionChange: setConnected }),
-          h(DTCPanel, null)
-        )
+          activeTab === 'dashboard' && h(Dashboard, { onConnectionChange: setConnected, onFpsChange: setFps }),
+          activeTab === 'dtcs'      && h(DTCPanel, null),
+          activeTab === 'can'       && h(CANMonitor, null),
+          activeTab === 'uds'       && h(UDSConsole, null),
+          activeTab === 'logs'      && h(LogsPanel, null)
+        ),
+
+        /* Footer */
+        h('footer', { className: 'footer' },
+          h('span', null, 'Auto-Diag Suite v0.1.0'),
+          h('span', null, '·'),
+          h('a', { href: 'https://github.com/your-org/auto-diag-suite', target: '_blank', rel: 'noopener' }, '⭐ Repositorio'),
+          h('span', null, '·'),
+          h('span', null, '© 2026')
+        ),
+
+        /* Toast container */
+        h(ToastContainer, null)
       );
     }
 
-    /* ─────────────────────────────────────────
-       Mount
-    ───────────────────────────────────────── */
+    /* Mount */
     var root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(h(App, null));
 
