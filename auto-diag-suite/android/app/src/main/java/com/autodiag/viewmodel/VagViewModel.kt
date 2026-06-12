@@ -71,7 +71,7 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
             val result = mutableListOf<ModuleStatus>()
             for (m in VagCatalog.modules) {
                 _status.value = "Consultando: ${m.name}…"
-                runCatching { r.sendRaw("AT SH ${m.reqId}") }
+                selectModule(r, m)
                 // Pedimos el nombre del sistema / VIN para confirmar presencia.
                 val resp = runCatching { r.sendRaw("22 F197") }.getOrElse { "" }
                 val reading = UdsInterpreter.interpret(resp, "22")
@@ -111,7 +111,7 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
             for (f in VagCatalog.features) {
                 val mod = VagCatalog.moduleByAddress(f.moduleAddress)
                 if (mod == null) { states.add(FeatureState(f, false, false, "Módulo desconocido.")); continue }
-                runCatching { r.sendRaw("AT SH ${mod.reqId}") }
+                selectModule(r, mod)
                 runCatching { r.sendRaw("10 03") } // sesión extendida
                 val resp = runCatching { r.sendRaw("22 ${f.didRead}") }.getOrElse { "" }
                 val block = parseBlock(resp, f.didRead)
@@ -142,7 +142,7 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         _busy.value = true
         _status.value = "Aplicando: ${f.name} → ${if (turnOn) "ACTIVAR" else "DESACTIVAR"}…"
         viewModelScope.launch {
-            runCatching { r.sendRaw("AT SH ${mod.reqId}") }
+            selectModule(r, mod)
             runCatching { r.sendRaw("10 03") }
             // Acceso de seguridad con el login conocido del módulo (o el que pegó el usuario).
             val secNote = attemptSecurityAccess(r, mod)
@@ -194,6 +194,21 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val res = UdsInterpreter.interpret(keyResp, "27")
         return if (res.ok) "  (Acceso de seguridad concedido con login $login ✓)"
         else "  (Login $login no aceptado: ${res.plain} — no se reintenta para no bloquear el módulo)"
+    }
+
+    /**
+     * Selecciona un módulo en el ELM327. No basta con poner el header de envío
+     * (AT SH): hay que decirle al adaptador qué ID CAN aceptar de respuesta
+     * (AT CRA), si no filtra todo lo que no sea 7E8-7EF y los módulos como 09/17
+     * (que responden en 778/77E) parecen "no responder". También configuramos el
+     * control de flujo ISO-TP para respuestas multi-trama (codificaciones largas).
+     */
+    private suspend fun selectModule(r: com.autodiag.data.ObdRepository, mod: VagCatalog.Module) {
+        runCatching { r.sendRaw("AT SH ${mod.reqId}") }
+        runCatching { r.sendRaw("AT CRA ${mod.rspId}") }
+        runCatching { r.sendRaw("AT FC SH ${mod.reqId}") }
+        runCatching { r.sendRaw("AT FC SD 30 00 00") }
+        runCatching { r.sendRaw("AT FC SM 1") }
     }
 
     /** Extrae los bytes de semilla de una respuesta '67 01 <seed...>'. */
