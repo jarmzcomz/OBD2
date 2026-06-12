@@ -342,6 +342,7 @@ private fun VagTab(vm: VagViewModel) {
     val features by vm.features.collectAsState()
     val status by vm.status.collectAsState()
     val busy by vm.busy.collectAsState()
+    val securityCode by vm.securityCode.collectAsState()
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -404,6 +405,32 @@ private fun VagTab(vm: VagViewModel) {
                     "cambiar nada. Si tu módulo no la soporta o pide acceso de seguridad, el " +
                     "interruptor te lo dirá en texto en vez de fallar a ciegas.",
                 color = Color(0xFFF59E0B), fontSize = 11.sp
+            )
+        }
+        // Campo opcional para pegar el código/llave de seguridad.
+        item {
+            OutlinedTextField(
+                value = securityCode,
+                onValueChange = { vm.setSecurityCode(it) },
+                label = { Text("Código de seguridad (opcional)", fontSize = 12.sp) },
+                placeholder = { Text("Pega aquí tu código de VCDS/OBDeleven", fontSize = 12.sp) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color(0xFFE5EAF2),
+                    unfocusedTextColor = Color(0xFFE5EAF2),
+                    focusedBorderColor = Color(0xFF2563EB),
+                    unfocusedBorderColor = Color(0xFF1E2A3D),
+                    focusedLabelColor = Color(0xFF93B4E8),
+                    unfocusedLabelColor = Color(0xFF7C8AA5)
+                )
+            )
+        }
+        item {
+            Text(
+                "Déjalo vacío si no tienes código: la app no enviará llaves al azar (eso evita " +
+                    "bloquear el módulo). Con código, intentará el acceso de seguridad antes de escribir.",
+                color = Color(0xFF7C8AA5), fontSize = 10.sp
             )
         }
         if (features.isEmpty()) {

@@ -46,6 +46,16 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
+    /**
+     * Código/llave de seguridad que el usuario pega manualmente (ej. el "código de
+     * acceso" de VCDS/OBDeleven o una llave hex). Si está vacío, NO intentamos
+     * acceso de seguridad para evitar bloquear el módulo con llaves equivocadas.
+     */
+    private val _securityCode = MutableStateFlow("")
+    val securityCode: StateFlow<String> = _securityCode.asStateFlow()
+
+    fun setSecurityCode(code: String) { _securityCode.value = code.trim() }
+
     val available: Boolean
         get() = getApplication<AutoDiagApplication>().activeRepository?.capabilities?.rawTerminal == true
 
@@ -134,6 +144,8 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching { r.sendRaw("AT SH ${mod.reqId}") }
             runCatching { r.sendRaw("10 03") }
+            // Acceso de seguridad solo si el usuario pegó un código (evita bloqueos).
+            val secNote = attemptSecurityAccess(r)
             val resp = runCatching { r.sendRaw("22 ${f.didRead}") }.getOrElse { "" }
             val block = parseBlock(resp, f.didRead)?.toMutableList()
             if (block == null || f.byteIndex >= block.size) {
@@ -147,10 +159,31 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
             val write = runCatching { r.sendRaw("2E ${f.didRead} $payload") }.getOrElse { "" }
             val reading = UdsInterpreter.interpret(write, "2E")
             _status.value = if (reading.ok) "✓ Listo: '${f.name}' quedó ${if (turnOn) "activado" else "desactivado"}."
-            else "No se pudo cambiar '${f.name}'. ${reading.plain}"
+            else "No se pudo cambiar '${f.name}'. ${reading.plain}$secNote"
             loadFeatures()
             _busy.value = false
         }
+    }
+
+    /**
+     * Intenta el acceso de seguridad UDS (servicio 0x27) SOLO si el usuario pegó
+     * un código. Pide la semilla (27 03) y envía la llave (27 04 <bytes>). Devuelve
+     * una nota en texto plano para añadir al estado. Si no hay código, no hace nada
+     * para no arriesgar un bloqueo por intentos fallidos.
+     */
+    private suspend fun attemptSecurityAccess(r: com.autodiag.data.ObdRepository): String {
+        val code = _securityCode.value.replace(Regex("[^0-9A-Fa-f]"), "")
+        if (code.isEmpty()) return "  (Sin código de seguridad: solo se intentó escribir directo.)"
+        val seedResp = runCatching { r.sendRaw("27 03") }.getOrElse { "" }
+        val seed = UdsInterpreter.interpret(seedResp, "27")
+        if (!seed.ok) return "  (No se obtuvo la semilla de seguridad: ${seed.plain})"
+        // Enviamos el código tal cual como llave. El cálculo seed→key real se
+        // integrará cuando tengamos el algoritmo verificado para el T-Cross.
+        val keyBytes = code.chunked(2).joinToString(" ")
+        val keyResp = runCatching { r.sendRaw("27 04 $keyBytes") }.getOrElse { "" }
+        val key = UdsInterpreter.interpret(keyResp, "27")
+        return if (key.ok) "  (Acceso de seguridad concedido ✓)"
+        else "  (Acceso de seguridad rechazado: ${key.plain})"
     }
 
     /** Extrae los bytes de datos de una respuesta '62 <did> <bytes...>'. */
