@@ -181,7 +181,12 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Lee el VIN del auto y lo muestra en texto. */
     fun readVin() = oneShot("Leyendo número de serie (VIN)…") { r ->
-        r.sendRaw("AT SH 7E0")
+        // IMPORTANTE: tras un escaneo/volcado el filtro de recepción (AT CRA) queda
+        // fijo en el último módulo. Hay que restaurarlo o el VIN no llega. Para Modo
+        // 09 (OBD estándar) el motor responde en 7E8 con direccionamiento funcional.
+        r.sendRaw("AT CRA")     // limpia el filtro de recepción
+        r.sendRaw("AT AR")      // recepción automática de direcciones
+        r.sendRaw("AT SH 7DF")  // cabecera funcional OBD-II
         val resp = r.sendRaw("09 02")
         val ascii = UdsInterpreter.hexToAscii(resp)
         if (ascii != null && ascii.length >= 10) "VIN del vehículo: ${ascii.takeLast(17)}"
