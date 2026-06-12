@@ -55,4 +55,30 @@ class DemoRepository : ObdRepository {
     }.flowOn(Dispatchers.IO)
 
     override suspend fun clearDtcs() { delay(400) }
+
+    override suspend fun sendRaw(command: String): String {
+        delay(120) // simular latencia del adaptador
+        val cmd = command.uppercase().replace(" ", "")
+        return when {
+            cmd.startsWith("ATI") || cmd == "AT@1" -> "ELM327 v1.5 (DEMO)"
+            cmd.startsWith("ATRV") -> "14.2V"
+            cmd.startsWith("ATDP") -> "AUTO, ISO 15765-4 (CAN 11/500)"
+            cmd == "0902" -> "49 02 01 31 48 47 43 4D 38 32 36 33 33 41 30 30 34 33 35 32" // VIN demo
+            cmd == "0904" -> "49 04 01 44 45 4D 4F 2D 43 41 4C 2D 31 32 33"
+            cmd == "0100" -> "41 00 BE 3E B8 11"
+            cmd == "0101" -> "41 01 00 07 E5 00" // monitores
+            cmd == "03" -> "43 03 03 01 04 20 01 71"   // P0301 P0420 P0171
+            cmd == "07" -> "47 01 01 33"               // P0133 pendiente
+            cmd == "0A" -> "4A 00"                     // sin permanentes
+            cmd.startsWith("01") -> {
+                // Responder un PID en vivo si lo conocemos.
+                val info = PidDecoder.PIDS["01" + cmd.takeLast(2)]
+                if (info != null) "41 ${cmd.takeLast(2)} 7F 80" else "NO DATA"
+            }
+            cmd.startsWith("AT") -> "OK"
+            else -> "NO DATA"
+        }
+    }
+
+    override val capabilities = ObdCapabilities(rawTerminal = true, canMonitor = true)
 }

@@ -24,7 +24,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    // Historial en memoria para las gráficas en vivo: por PID, los últimos
+    // MAX_HISTORY valores. Suficiente para una traza temporal sin Room.
+    private val _history = MutableStateFlow<Map<String, List<Float>>>(emptyMap())
+    val history: StateFlow<Map<String, List<Float>>> = _history.asStateFlow()
+
+    private val historyBuffers = mutableMapOf<String, ArrayDeque<Float>>()
+
     private var initialized = false
+
+    companion object { const val MAX_HISTORY = 60 }
 
     fun initialize() {
         if (initialized) return
@@ -41,6 +50,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         repo.liveData
             .onEach { readings ->
                 _pidData.value = readings.mapValues { (name, value) -> pidDataFrom(name, value) }
+                // Acumular historial para gráficas.
+                readings.forEach { (name, value) ->
+                    val buf = historyBuffers.getOrPut(name) { ArrayDeque() }
+                    buf.addLast(value.toFloat())
+                    while (buf.size > MAX_HISTORY) buf.removeFirst()
+                }
+                _history.value = historyBuffers.mapValues { it.value.toList() }
             }
             .catch { e ->
                 _isConnected.value = false

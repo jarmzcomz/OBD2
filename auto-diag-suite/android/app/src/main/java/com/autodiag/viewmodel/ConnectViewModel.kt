@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 sealed class ConnectState {
     object Idle : ConnectState()
@@ -41,12 +42,18 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
 
-            runCatching { repo.connect() }
+            runCatching {
+                // Demo conecta al instante; el resto puede colgarse si el
+                // hardware no responde, así que limitamos a 15s.
+                val ok = withTimeoutOrNull(15_000) { repo.connect(); true }
+                if (ok != true) throw java.io.IOException("Tiempo de conexión agotado")
+            }
                 .onSuccess {
                     app.setRepository(repo, labelFor(mode, address))
                     _state.value = ConnectState.Connected
                 }
                 .onFailure { e ->
+                    runCatching { repo.disconnect() }
                     _state.value = ConnectState.Error(e.message ?: "Error al conectar")
                 }
         }
@@ -78,7 +85,7 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
                 if (mode == "ble") BleElm327Repository(device, app)
                 else BluetoothElm327Repository(device, adapter)
             }
-            else -> WebSocketRepository(host = address)
+            else -> WebSocketRepository(address)
         }
     }
 }

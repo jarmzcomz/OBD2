@@ -9,9 +9,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.PrintWriter
+import kotlinx.coroutines.withContext
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 
 private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
@@ -23,8 +23,8 @@ class BluetoothElm327Repository(
 ) : ObdRepository {
 
     private var socket: BluetoothSocket? = null
-    private var reader: BufferedReader? = null
-    private var writer: PrintWriter? = null
+    private var input: InputStream? = null
+    private var output: OutputStream? = null
 
     override fun connect() {
         // Discovery activo interfiere con el handshake RFCOMM y es la causa #1
@@ -32,18 +32,15 @@ class BluetoothElm327Repository(
         if (adapter.isDiscovering) adapter.cancelDiscovery()
 
         socket = try {
-            // Camino estándar: funciona en dongles que publican bien el record SPP.
             device.createRfcommSocketToServiceRecord(SPP_UUID).also { it.connect() }
         } catch (e: Exception) {
-            // Fallback por reflexión al canal RFCOMM 1. Es lo que hace conectar a
-            // los clones ELM327 (iCar Pro) que rechazan la conexión por UUID.
             connectViaReflection()
         }
 
-        reader = BufferedReader(InputStreamReader(socket!!.inputStream))
-        writer = PrintWriter(socket!!.outputStream, true)
+        input = socket!!.inputStream
+        output = socket!!.outputStream
         listOf("ATZ", "ATE0", "ATL0", "ATSP0").forEach { cmd ->
-            writer!!.println("$cmd\r")
+            query(cmd)
             Thread.sleep(100)
         }
     }
@@ -54,33 +51,48 @@ class BluetoothElm327Repository(
         try {
             fallback.connect()
         } catch (e: Exception) {
-            // Un reintento tras un breve respiro: el primer connect tras un SDP
-            // fallido suele tirar IOException aunque el siguiente sí enlace.
             Thread.sleep(300)
             fallback.connect()
         }
         return fallback
     }
 
-    override fun disconnect() { socket?.close() }
+    override fun disconnect() { runCatching { socket?.close() } }
 
+    /**
+     * Envía un comando y lee la respuesta hasta el prompt '>' del ELM327.
+     * NO usa readLine(): el prompt '>' no lleva salto de línea final, así que
+     * readLine() se quedaría bloqueado esperando un '\n' que nunca llega.
+     * Leemos byte a byte hasta encontrar '>'.
+     */
+    @Synchronized
     private fun query(cmd: String): String {
-        writer?.println("$cmd\r") ?: return ""
+        val out = output ?: return ""
+        val inp = input ?: return ""
+        out.write("$cmd\r".toByteArray(Charsets.US_ASCII))
+        out.flush()
+
         val sb = StringBuilder()
-        while (true) {
-            val line = reader?.readLine() ?: break
-            if (line.trimEnd() == ">") break
-            sb.appendLine(line)
+        val deadline = System.currentTimeMillis() + 3000
+        while (System.currentTimeMillis() < deadline) {
+            if (inp.available() > 0) {
+                val c = inp.read()
+                if (c == -1) break
+                val ch = c.toChar()
+                if (ch == '>') break
+                sb.append(ch)
+            } else {
+                Thread.sleep(10)
+            }
         }
-        return sb.toString()
+        return sb.toString().trim()
     }
 
     override val liveData: Flow<Map<String, Double>> = flow {
         while (true) {
             val map = mutableMapOf<String, Double>()
             PidDecoder.PIDS.keys.forEach { code ->
-                val raw = query(code)
-                PidDecoder.decodeResponse(raw)?.let { (name, value) -> map[name] = value }
+                PidDecoder.decodeResponse(query(code))?.let { (name, value) -> map[name] = value }
             }
             if (map.isNotEmpty()) emit(map)
             delay(500)
@@ -88,27 +100,13 @@ class BluetoothElm327Repository(
     }.flowOn(Dispatchers.IO)
 
     override val dtcs: Flow<List<String>> = flow {
-        val raw = query("03")
-        // Parseo básico de respuesta de servicio 03
-        val codes = raw.split("\n")
-            .flatMap { it.trim().split(" ") }
-            .filter { it.length == 2 }
-            .chunked(2)
-            .mapNotNull { pair ->
-                if (pair.size == 2) decodeDtc(pair[0].toIntOrNull(16) ?: 0, pair[1].toIntOrNull(16) ?: 0) else null
-            }
-        emit(codes)
+        emit(DtcParser.parse(query("03"), "03"))
     }.flowOn(Dispatchers.IO)
 
     override suspend fun clearDtcs() { query("04") }
 
-    private fun decodeDtc(a: Int, b: Int): String? {
-        if (a == 0 && b == 0) return null
-        val prefix = arrayOf("P", "C", "B", "U")[(a and 0xC0) shr 6]
-        val d1 = (a and 0x30) shr 4
-        val d2 = a and 0x0F
-        val d3 = (b and 0xF0) shr 4
-        val d4 = b and 0x0F
-        return "$prefix$d1${d2.toString(16).uppercase()}${d3.toString(16).uppercase()}${d4.toString(16).uppercase()}"
-    }
+    override suspend fun sendRaw(command: String): String =
+        withContext(Dispatchers.IO) { query(command) }
+
+    override val capabilities = ObdCapabilities(rawTerminal = true, canMonitor = true)
 }
