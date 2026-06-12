@@ -33,8 +33,10 @@ import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -74,6 +76,8 @@ import com.autodiag.ui.components.DtcCard
 import com.autodiag.ui.components.GaugeView
 import com.autodiag.ui.components.LineChart
 import com.autodiag.viewmodel.AdvancedViewModel
+import com.autodiag.viewmodel.CodingViewModel
+import com.autodiag.viewmodel.CodingStep
 import com.autodiag.viewmodel.DashboardViewModel
 import com.autodiag.viewmodel.DiagnosticsViewModel
 import com.autodiag.viewmodel.DtcViewModel
@@ -89,7 +93,8 @@ fun HomeScreen(
     dtcVm: DtcViewModel = viewModel(),
     diagVm: DiagnosticsViewModel = viewModel(),
     terminalVm: TerminalViewModel = viewModel(),
-    advancedVm: AdvancedViewModel = viewModel()
+    advancedVm: AdvancedViewModel = viewModel(),
+    codingVm: CodingViewModel = viewModel()
 ) {
     LaunchedEffect(Unit) { dashboardVm.initialize() }
 
@@ -160,7 +165,7 @@ fun HomeScreen(
                 1 -> SensorsTab(pidData)
                 2 -> GraphsTab(pidData, history)
                 3 -> FallasTab(dtcVm)
-                4 -> MoreTab(diagVm, terminalVm, advancedVm, history, onDisconnect)
+                4 -> MoreTab(diagVm, terminalVm, advancedVm, codingVm, history, onDisconnect)
             }
         }
     }
@@ -320,6 +325,7 @@ private fun MoreTab(
     diagVm: DiagnosticsViewModel,
     terminalVm: TerminalViewModel,
     advancedVm: AdvancedViewModel,
+    codingVm: CodingViewModel,
     history: Map<String, List<Float>>,
     onDisconnect: () -> Unit
 ) {
@@ -376,6 +382,13 @@ private fun MoreTab(
         // --- Terminal de ingeniero ---
         SectionTitle("Terminal AT / OBD")
         TerminalPanel(terminalVm)
+
+        // --- Modificaciones del vehículo (escritura directa BT/BLE) ---
+        if (codingVm.available) {
+            Spacer(modifier = Modifier.height(8.dp))
+            SectionTitle("Modificaciones del vehículo")
+            CodingPanel(codingVm)
+        }
 
         // --- Panel avanzado (solo en modo WiFi/backend) ---
         if (advancedVm.available) {
@@ -473,6 +486,197 @@ private fun TerminalPanel(vm: TerminalViewModel) {
             Icon(Icons.Default.Send, contentDescription = "Enviar", tint = if (busy) Color(0xFF55627A) else Color(0xFF2563EB))
         }
     }
+}
+
+@Composable
+private fun CodingPanel(vm: CodingViewModel) {
+    val log by vm.log.collectAsState()
+    val busy by vm.busy.collectAsState()
+    var ecu by remember { mutableStateOf("7E0") }
+    var did by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf("") }
+    var rawCmd by remember { mutableStateOf("") }
+    // Acción pendiente de confirmar: (descripción, ejecutar).
+    var pending by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
+
+    fun confirm(desc: String, action: () -> Unit) { pending = desc to action }
+
+    Text(
+        "⚠ Escribe directamente en la ECU de tu auto. Una operación incorrecta " +
+            "puede dejar inservible un módulo. Úsalo solo si sabes lo que haces y, " +
+            "de preferencia, con el motor encendido y la batería con buena carga.",
+        color = Color(0xFFF59E0B), fontSize = 11.sp
+    )
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // --- Paso 1: seleccionar ECU y abrir sesión ---
+    Text("1 · ECU y sesión", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(modifier = Modifier.height(6.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = ecu, onValueChange = { ecu = it },
+            label = { Text("Header ECU (ej. 7E0)", color = Color(0xFF7C8AA5), fontSize = 11.sp) },
+            singleLine = true, modifier = Modifier.weight(1f), colors = monoFieldColors()
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        Box(
+            modifier = Modifier.background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                .clickable(enabled = !busy) { vm.setEcuHeader(ecu) }.padding(horizontal = 14.dp, vertical = 12.dp)
+        ) { Text("Fijar", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        AdvChip("Sesión ext.", Modifier.weight(1f)) { vm.openExtendedSession() }
+        AdvChip("Sesión prog.", Modifier.weight(1f)) { vm.openProgrammingSession() }
+        AdvChip("Reset ECU", Modifier.weight(1f)) { confirm("Reiniciar la ECU seleccionada") { vm.ecuReset() } }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // --- Paso 2: acceso de seguridad ---
+    Text("2 · Acceso de seguridad", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(modifier = Modifier.height(6.dp))
+    var key by remember { mutableStateOf("") }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        AdvChip("Pedir semilla", Modifier.weight(1f)) { vm.requestSeed() }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = key, onValueChange = { key = it },
+            label = { Text("Llave calculada (hex)", color = Color(0xFF7C8AA5), fontSize = 11.sp) },
+            singleLine = true, modifier = Modifier.weight(1f), colors = monoFieldColors()
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        IconButton(onClick = { vm.sendKey(key) }, enabled = !busy && key.isNotBlank()) {
+            Icon(Icons.Default.Send, contentDescription = "Enviar llave", tint = if (busy) Color(0xFF55627A) else Color(0xFF2563EB))
+        }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // --- Paso 3: escritura / codificación ---
+    Text("3 · Escribir configuración", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(modifier = Modifier.height(6.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = did, onValueChange = { did = it },
+            label = { Text("DID", color = Color(0xFF7C8AA5), fontSize = 11.sp) },
+            singleLine = true, modifier = Modifier.weight(1f), colors = monoFieldColors()
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        OutlinedTextField(
+            value = value, onValueChange = { value = it },
+            label = { Text("Valor (hex)", color = Color(0xFF7C8AA5), fontSize = 11.sp) },
+            singleLine = true, modifier = Modifier.weight(1.4f), colors = monoFieldColors()
+        )
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    Button(
+        onClick = { confirm("Escribir DID $did = $value en ECU $ecu") { vm.writeDataByIdentifier(did, value) } },
+        enabled = !busy && did.isNotBlank() && value.isNotBlank(),
+        modifier = Modifier.fillMaxWidth().height(46.dp), shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444), disabledContainerColor = Color(0xFF1E2A3D))
+    ) { Text("Escribir a la ECU (2E)", color = Color.White, fontWeight = FontWeight.SemiBold) }
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // --- Acciones rápidas comunes ---
+    Text("Acciones rápidas", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(modifier = Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        AdvChip("Reset adapt.", Modifier.weight(1f)) {
+            confirm("Borrar adaptaciones / aprendizajes de la ECU") { vm.resetAdaptations() }
+        }
+        AdvChip("Rutina FF00", Modifier.weight(1f)) {
+            confirm("Ejecutar rutina FF00 (arranque)") { vm.routineControl("01", "FF00") }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // --- Comando crudo libre ---
+    Text("Comando manual (avanzado)", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(modifier = Modifier.height(6.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = rawCmd, onValueChange = { rawCmd = it },
+            placeholder = { Text("ej. 2E F190 ...", color = Color(0xFF55627A)) },
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+            singleLine = true, modifier = Modifier.weight(1f), colors = monoFieldColors()
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        IconButton(
+            onClick = { val c = rawCmd; confirm("Enviar comando manual: $c") { vm.sendRawWrite(c); rawCmd = "" } },
+            enabled = !busy && rawCmd.isNotBlank()
+        ) {
+            Icon(Icons.Default.Send, contentDescription = "Enviar", tint = if (busy) Color(0xFF55627A) else Color(0xFFEF4444))
+        }
+    }
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // --- Bitácora de operaciones ---
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("Bitácora", color = Color(0xFFE5EAF2), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        if (log.isNotEmpty()) {
+            Box(modifier = Modifier.clickable { vm.clearLog() }.padding(6.dp)) {
+                Icon(Icons.Default.DeleteForever, contentDescription = "Limpiar", tint = Color(0xFF7C8AA5), modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(6.dp))
+    Column(
+        modifier = Modifier.fillMaxWidth().height(180.dp)
+            .background(Color(0xFF0A0F1A), RoundedCornerShape(10.dp))
+            .border(1.dp, Color(0xFF1E2A3D), RoundedCornerShape(10.dp))
+            .verticalScroll(rememberScrollState()).padding(12.dp)
+    ) {
+        if (log.isEmpty()) {
+            Text("Las operaciones aparecerán aquí…", color = Color(0xFF55627A), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        }
+        log.forEach { step -> CodingLogRow(step) }
+    }
+
+    // Diálogo de confirmación para cualquier escritura.
+    pending?.let { (desc, action) ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            containerColor = Color(0xFF131C2E),
+            title = { Text("Confirmar escritura", color = Color(0xFFE5EAF2), fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "$desc\n\nEsta operación modifica tu vehículo y no siempre es reversible. " +
+                        "¿Continuar?",
+                    color = Color(0xFFC8D2E0), fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { action(); pending = null }) {
+                    Text("Ejecutar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pending = null }) { Text("Cancelar", color = Color(0xFF7C8AA5)) }
+            }
+        )
+    }
+}
+
+@Composable
+private fun CodingLogRow(step: CodingStep) {
+    if (step.response.isBlank()) {
+        Text(step.request, color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+        Spacer(modifier = Modifier.height(4.dp))
+        return
+    }
+    Text("> ${step.request}", color = Color(0xFF22C55E), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+    Text(
+        step.response,
+        color = if (step.ok) Color(0xFFC8D2E0) else Color(0xFFEF4444),
+        fontSize = 11.sp, fontFamily = FontFamily.Monospace
+    )
+    Spacer(modifier = Modifier.height(6.dp))
 }
 
 @Composable
