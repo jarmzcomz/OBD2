@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -47,6 +48,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -79,6 +82,9 @@ import com.autodiag.viewmodel.AdvancedViewModel
 import com.autodiag.viewmodel.CodingViewModel
 import com.autodiag.viewmodel.CodingStep
 import com.autodiag.viewmodel.DashboardViewModel
+import com.autodiag.viewmodel.FeatureState
+import com.autodiag.viewmodel.ModuleStatus
+import com.autodiag.viewmodel.VagViewModel
 import com.autodiag.viewmodel.DiagnosticsViewModel
 import com.autodiag.viewmodel.DtcViewModel
 import com.autodiag.viewmodel.TerminalViewModel
@@ -94,7 +100,8 @@ fun HomeScreen(
     diagVm: DiagnosticsViewModel = viewModel(),
     terminalVm: TerminalViewModel = viewModel(),
     advancedVm: AdvancedViewModel = viewModel(),
-    codingVm: CodingViewModel = viewModel()
+    codingVm: CodingViewModel = viewModel(),
+    vagVm: VagViewModel = viewModel()
 ) {
     LaunchedEffect(Unit) { dashboardVm.initialize() }
 
@@ -111,9 +118,10 @@ fun HomeScreen(
         Tab("Sensores") { Icon(Icons.Default.Speed, contentDescription = null) },
         Tab("Gráficas") { Icon(Icons.Default.ShowChart, contentDescription = null) },
         Tab("Fallas") { Icon(Icons.Default.Warning, contentDescription = null) },
+        Tab("Mi Auto") { Icon(Icons.Default.Tune, contentDescription = null) },
         Tab("Más") { Icon(Icons.Default.Terminal, contentDescription = null) }
     )
-    val titles = listOf("Tablero en vivo", "Sensores", "Gráficas en vivo", "Códigos de falla", "Herramientas")
+    val titles = listOf("Tablero en vivo", "Sensores", "Gráficas en vivo", "Códigos de falla", "Mi Auto (modo fácil)", "Herramientas")
 
     Scaffold(
         topBar = {
@@ -165,7 +173,8 @@ fun HomeScreen(
                 1 -> SensorsTab(pidData)
                 2 -> GraphsTab(pidData, history)
                 3 -> FallasTab(dtcVm)
-                4 -> MoreTab(diagVm, terminalVm, advancedVm, codingVm, history, onDisconnect)
+                4 -> VagTab(vagVm)
+                5 -> MoreTab(diagVm, terminalVm, advancedVm, codingVm, history, onDisconnect)
             }
         }
     }
@@ -317,6 +326,147 @@ private fun FallasTab(dtcVm: DtcViewModel) {
                 items(dtcs, key = { it.code }) { dtc -> DtcCard(dtc = dtc) }
             }
         }
+    }
+}
+
+@Composable
+private fun VagTab(vm: VagViewModel) {
+    if (!vm.available) {
+        CenteredMessage(
+            "Conéctate primero", Color(0xFFE5EAF2),
+            "Esta sección lee y configura tu auto VAG. Conéctate por Bluetooth a tu adaptador ELM327 para usarla."
+        )
+        return
+    }
+    val modules by vm.modules.collectAsState()
+    val features by vm.features.collectAsState()
+    val status by vm.status.collectAsState()
+    val busy by vm.busy.collectAsState()
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Barra de estado en texto plano.
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .background(Color(0xFF131C2E), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color(0xFF1E2A3D), RoundedCornerShape(12.dp))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (busy) {
+                    CircularProgressIndicator(color = Color(0xFF2563EB), strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.size(12.dp))
+                }
+                Text(status, color = Color(0xFFC8D2E0), fontSize = 13.sp)
+            }
+        }
+
+        // Acciones principales.
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { vm.scanModules() }, enabled = !busy,
+                    modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                ) { Text("Escanear el auto", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
+                Button(
+                    onClick = { vm.readVin() }, enabled = !busy,
+                    modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A5F))
+                ) { Text("Leer VIN", color = Color(0xFF93B4E8), fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
+            }
+        }
+
+        // Resultado del escaneo de módulos.
+        if (modules.isNotEmpty()) {
+            item { SectionTitle("Módulos encontrados") }
+            items(modules, key = { it.address }) { m -> ModuleRow(m) }
+        }
+
+        // Interruptores de funciones.
+        item {
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Funciones (interruptores)", color = Color(0xFFE5EAF2), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier.background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                        .clickable(enabled = !busy) { vm.loadFeatures() }.padding(horizontal = 12.dp, vertical = 8.dp)
+                ) { Text("Leer estado", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+            }
+        }
+        item {
+            Text(
+                "⚠ Estas funciones son específicas de VW/Audi/SEAT/Škoda. La app lee el " +
+                    "estado real antes de cambiar nada. Si tu modelo no la soporta, el interruptor lo dirá.",
+                color = Color(0xFFF59E0B), fontSize = 11.sp
+            )
+        }
+        if (features.isEmpty()) {
+            item {
+                Text("Toca \"Leer estado\" para ver qué funciones tiene tu auto.", color = Color(0xFF7C8AA5), fontSize = 13.sp)
+            }
+        } else {
+            items(features, key = { it.feature.id }) { fs -> FeatureRow(fs, busy, vm) }
+        }
+        item { Spacer(modifier = Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun ModuleRow(m: ModuleStatus) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .background(Color(0xFF131C2E), RoundedCornerShape(12.dp))
+            .border(1.dp, Color(0xFF1E2A3D), RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(if (m.present) "✓" else "○", color = if (m.present) Color(0xFF22C55E) else Color(0xFF55627A), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.size(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("${m.name}  (${m.address})", color = Color(0xFFE5EAF2), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(m.detail, color = Color(0xFF7C8AA5), fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun FeatureRow(fs: FeatureState, busy: Boolean, vm: VagViewModel) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .background(Color(0xFF131C2E), RoundedCornerShape(12.dp))
+            .border(1.dp, Color(0xFF1E2A3D), RoundedCornerShape(12.dp))
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(fs.feature.name, color = Color(0xFFE5EAF2), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(fs.feature.description, color = Color(0xFF7C8AA5), fontSize = 11.sp)
+            }
+            Spacer(modifier = Modifier.size(12.dp))
+            Switch(
+                checked = fs.enabled,
+                onCheckedChange = { vm.toggleFeature(fs.feature, it) },
+                enabled = fs.known && !busy,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Color(0xFF22C55E),
+                    uncheckedThumbColor = Color(0xFF7C8AA5),
+                    uncheckedTrackColor = Color(0xFF1E2A3D)
+                )
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            if (fs.known) "Estado: ${fs.note}" else "ⓘ ${fs.note}",
+            color = if (fs.known) Color(0xFF93B4E8) else Color(0xFFF59E0B),
+            fontSize = 11.sp
+        )
     }
 }
 

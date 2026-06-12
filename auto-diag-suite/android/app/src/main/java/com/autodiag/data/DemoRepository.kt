@@ -64,6 +64,14 @@ class DemoRepository : ObdRepository {
             cmd.startsWith("ATRV") -> "14.2V"
             cmd.startsWith("ATDP") -> "AUTO, ISO 15765-4 (CAN 11/500)"
             cmd == "0902" -> "49 02 01 31 48 47 43 4D 38 32 36 33 33 41 30 30 34 33 35 32" // VIN demo
+            // --- VAG (demo) ---
+            cmd == "1003" || cmd == "1002" -> "50 03 00 32 01 F4" // sesión abierta
+            cmd.startsWith("22F197") -> "62 F197 44 45 4D 4F 2D 45 43 55" // "DEMO-ECU" en ASCII
+            cmd.startsWith("220600") -> "62 06 00 1F 0A 14 28 50 A0"      // bloque de codificación demo
+            cmd.startsWith("2E0600") -> "6E 06 00"                        // escritura aceptada
+            cmd.startsWith("2701") -> "67 01 12 34 56 78"                 // semilla demo
+            cmd.startsWith("2702") -> "67 02"                             // llave aceptada
+            cmd.startsWith("11") -> "51 01"                               // reset ECU ok
             cmd == "0904" -> "49 04 01 44 45 4D 4F 2D 43 41 4C 2D 31 32 33"
             cmd == "0100" -> "41 00 BE 3E B8 11"
             cmd == "0101" -> "41 01 00 07 E5 00" // monitores
