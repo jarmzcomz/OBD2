@@ -47,6 +47,16 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     /**
+     * Registro crudo (hex) del último intento de cambio. Sirve para diagnosticar:
+     * el usuario lo comparte y se ve EXACTAMENTE qué respondió cada módulo, sin
+     * adivinar posiciones de bits. Vacío = no mostrar.
+     */
+    private val _diag = MutableStateFlow("")
+    val diag: StateFlow<String> = _diag.asStateFlow()
+
+    fun clearDiag() { _diag.value = "" }
+
+    /**
      * Código/llave de seguridad que el usuario pega manualmente (ej. el "código de
      * acceso" de VCDS/OBDeleven o una llave hex). Si está vacío, NO intentamos
      * acceso de seguridad para evitar bloquear el módulo con llaves equivocadas.
@@ -141,25 +151,43 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val mod = VagCatalog.moduleByAddress(f.moduleAddress) ?: return
         _busy.value = true
         _status.value = "Aplicando: ${f.name} → ${if (turnOn) "ACTIVAR" else "DESACTIVAR"}…"
+        val log = StringBuilder("DIAGNÓSTICO · ${f.name}\nMódulo ${mod.address} (tx ${mod.reqId}/rx ${mod.rspId})\n")
         viewModelScope.launch {
+            // Helper local: envía un comando, registra el hex crudo y lo devuelve.
+            suspend fun send(cmd: String): String {
+                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error: ${it.message}>" }
+                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                return resp
+            }
             selectModule(r, mod)
-            runCatching { r.sendRaw("10 03") }
-            // Acceso de seguridad con el login conocido del módulo (o el que pegó el usuario).
-            val secNote = attemptSecurityAccess(r, mod)
-            val resp = runCatching { r.sendRaw("22 ${f.didRead}") }.getOrElse { "" }
+            send("10 03") // sesión extendida
+            // 1) Leer el bloque de codificación ANTES de tocar nada.
+            val resp = send("22 ${f.didRead}")
             val block = parseBlock(resp, f.didRead)?.toMutableList()
-            if (block == null || f.byteIndex >= block.size) {
-                _status.value = "No se pudo leer la configuración para modificarla con seguridad. Cambio cancelado."
+            if (block == null) {
+                _status.value = "No pude leer la codificación del módulo, así que NO escribí nada (seguro). " +
+                    "Comparte el diagnóstico de abajo y te digo el siguiente paso."
+                _diag.value = log.toString()
+                _busy.value = false; return@launch
+            }
+            // 2) Acceso de seguridad (registrado en el log).
+            val sec = attemptSecurityAccessLogged(r, mod, ::send)
+            // 3) Si el bit objetivo cae fuera del bloque, NO inventamos: avisamos.
+            if (f.byteIndex >= block.size) {
+                _status.value = "Leí la codificación pero el dato de '${f.name}' no está donde se esperaba en TU " +
+                    "versión de software. NO escribí nada. Comparte el diagnóstico de abajo y te doy la posición exacta."
+                _diag.value = log.toString()
                 _busy.value = false; return@launch
             }
             val setBit = if (f.onMeansSet) turnOn else !turnOn
             block[f.byteIndex] = if (setBit) block[f.byteIndex] or f.bitMask
             else block[f.byteIndex] and f.bitMask.inv()
             val payload = block.joinToString(" ") { "%02X".format(it and 0xFF) }
-            val write = runCatching { r.sendRaw("2E ${f.didRead} $payload") }.getOrElse { "" }
+            val write = send("2E ${f.didRead} $payload")
             val reading = UdsInterpreter.interpret(write, "2E")
             _status.value = if (reading.ok) "✓ Listo: '${f.name}' quedó ${if (turnOn) "activado" else "desactivado"}."
-            else "No se pudo cambiar '${f.name}'. ${reading.plain}$secNote"
+            else "No se pudo cambiar '${f.name}'. ${reading.plain}$sec\n\nComparte el diagnóstico de abajo para afinarlo."
+            _diag.value = log.toString()
             loadFeatures()
             _busy.value = false
         }
@@ -173,13 +201,17 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
      * (27 02). UN SOLO intento: si falla, NO reintenta (así no se dispara el
      * bloqueo de ~20 min por exceso de intentos).
      */
-    private suspend fun attemptSecurityAccess(r: com.autodiag.data.ObdRepository, mod: VagCatalog.Module): String {
+    private suspend fun attemptSecurityAccessLogged(
+        r: com.autodiag.data.ObdRepository,
+        mod: VagCatalog.Module,
+        send: suspend (String) -> String
+    ): String {
         // Prioridad: código pegado por el usuario; si no, login conocido del módulo.
         val userCode = _securityCode.value.replace(Regex("[^0-9]"), "").toIntOrNull()
         val login = userCode ?: mod.login
         if (login == null) return "  (Sin código de seguridad para este módulo: se intentó escribir directo.)"
 
-        val seedResp = runCatching { r.sendRaw("27 01") }.getOrElse { "" }
+        val seedResp = send("27 01")
         val seed = UdsInterpreter.interpret(seedResp, "27")
         if (!seed.ok) return "  (No se obtuvo la semilla: ${seed.plain})"
         // Si la semilla es toda ceros, el módulo ya está desbloqueado.
@@ -190,8 +222,7 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val key = (0 until width).joinToString(" ") { i ->
             "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
         }
-        val keyResp = runCatching { r.sendRaw("27 02 $key") }.getOrElse { "" }
-        val res = UdsInterpreter.interpret(keyResp, "27")
+        val res = UdsInterpreter.interpret(send("27 02 $key"), "27")
         return if (res.ok) "  (Acceso de seguridad concedido con login $login ✓)"
         else "  (Login $login no aceptado: ${res.plain} — no se reintenta para no bloquear el módulo)"
     }

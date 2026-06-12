@@ -65,7 +65,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -343,6 +345,8 @@ private fun VagTab(vm: VagViewModel) {
     val status by vm.status.collectAsState()
     val busy by vm.busy.collectAsState()
     val securityCode by vm.securityCode.collectAsState()
+    val diag by vm.diag.collectAsState()
+    val clipboard = LocalClipboardManager.current
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -363,6 +367,38 @@ private fun VagTab(vm: VagViewModel) {
                     Spacer(modifier = Modifier.size(12.dp))
                 }
                 Text(status, color = Color(0xFFC8D2E0), fontSize = 13.sp)
+            }
+        }
+
+        // Panel de diagnóstico crudo (hex). Aparece tras un intento de cambio para
+        // que el usuario lo copie y lo comparta — así se afina sin adivinar.
+        if (diag.isNotBlank()) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Color(0xFF0E1626), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFF2A3a52), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text("🔎 Diagnóstico (compártelo para afinar)", color = Color(0xFF93B4E8),
+                        fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(diag, color = Color(0xFF9FB3C8), fontSize = 11.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier.background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                                .clickable { clipboard.setText(AnnotatedString(diag)) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) { Text("Copiar", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                        Box(
+                            modifier = Modifier.background(Color(0xFF1A2438), RoundedCornerShape(8.dp))
+                                .clickable { vm.clearDiag() }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) { Text("Ocultar", color = Color(0xFF7C8AA5), fontSize = 12.sp) }
+                    }
+                }
             }
         }
 
