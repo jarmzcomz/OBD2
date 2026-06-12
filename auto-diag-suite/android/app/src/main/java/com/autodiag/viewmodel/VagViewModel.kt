@@ -144,8 +144,8 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching { r.sendRaw("AT SH ${mod.reqId}") }
             runCatching { r.sendRaw("10 03") }
-            // Acceso de seguridad solo si el usuario pegó un código (evita bloqueos).
-            val secNote = attemptSecurityAccess(r)
+            // Acceso de seguridad con el login conocido del módulo (o el que pegó el usuario).
+            val secNote = attemptSecurityAccess(r, mod)
             val resp = runCatching { r.sendRaw("22 ${f.didRead}") }.getOrElse { "" }
             val block = parseBlock(resp, f.didRead)?.toMutableList()
             if (block == null || f.byteIndex >= block.size) {
@@ -166,24 +166,44 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Intenta el acceso de seguridad UDS (servicio 0x27) SOLO si el usuario pegó
-     * un código. Pide la semilla (27 03) y envía la llave (27 04 <bytes>). Devuelve
-     * una nota en texto plano para añadir al estado. Si no hay código, no hace nada
-     * para no arriesgar un bloqueo por intentos fallidos.
+     * Acceso de seguridad UDS estático (servicio 0x27 nivel 1/2), como hace VCDS
+     * para codificar en MQB pre-SFD. Usa el login conocido del módulo (ej. 09 →
+     * 31347) o, si el usuario pegó uno, ese. Pide la semilla (27 01), codifica el
+     * login en big-endian con el mismo número de bytes que la semilla y lo envía
+     * (27 02). UN SOLO intento: si falla, NO reintenta (así no se dispara el
+     * bloqueo de ~20 min por exceso de intentos).
      */
-    private suspend fun attemptSecurityAccess(r: com.autodiag.data.ObdRepository): String {
-        val code = _securityCode.value.replace(Regex("[^0-9A-Fa-f]"), "")
-        if (code.isEmpty()) return "  (Sin código de seguridad: solo se intentó escribir directo.)"
-        val seedResp = runCatching { r.sendRaw("27 03") }.getOrElse { "" }
+    private suspend fun attemptSecurityAccess(r: com.autodiag.data.ObdRepository, mod: VagCatalog.Module): String {
+        // Prioridad: código pegado por el usuario; si no, login conocido del módulo.
+        val userCode = _securityCode.value.replace(Regex("[^0-9]"), "").toIntOrNull()
+        val login = userCode ?: mod.login
+        if (login == null) return "  (Sin código de seguridad para este módulo: se intentó escribir directo.)"
+
+        val seedResp = runCatching { r.sendRaw("27 01") }.getOrElse { "" }
         val seed = UdsInterpreter.interpret(seedResp, "27")
-        if (!seed.ok) return "  (No se obtuvo la semilla de seguridad: ${seed.plain})"
-        // Enviamos el código tal cual como llave. El cálculo seed→key real se
-        // integrará cuando tengamos el algoritmo verificado para el T-Cross.
-        val keyBytes = code.chunked(2).joinToString(" ")
-        val keyResp = runCatching { r.sendRaw("27 04 $keyBytes") }.getOrElse { "" }
-        val key = UdsInterpreter.interpret(keyResp, "27")
-        return if (key.ok) "  (Acceso de seguridad concedido ✓)"
-        else "  (Acceso de seguridad rechazado: ${key.plain})"
+        if (!seed.ok) return "  (No se obtuvo la semilla: ${seed.plain})"
+        // Si la semilla es toda ceros, el módulo ya está desbloqueado.
+        val seedBytes = parseSeedBytes(seedResp)
+        if (seedBytes != null && seedBytes.all { it == 0 }) return "  (El módulo ya estaba desbloqueado ✓)"
+
+        val width = (seedBytes?.size ?: 3).coerceIn(2, 4)
+        val key = (0 until width).joinToString(" ") { i ->
+            "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
+        }
+        val keyResp = runCatching { r.sendRaw("27 02 $key") }.getOrElse { "" }
+        val res = UdsInterpreter.interpret(keyResp, "27")
+        return if (res.ok) "  (Acceso de seguridad concedido con login $login ✓)"
+        else "  (Login $login no aceptado: ${res.plain} — no se reintenta para no bloquear el módulo)"
+    }
+
+    /** Extrae los bytes de semilla de una respuesta '67 01 <seed...>'. */
+    private fun parseSeedBytes(raw: String): List<Int>? {
+        val hex = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
+        val pos = hex.indexOf("6701")
+        if (pos < 0) return null
+        val data = hex.substring(pos + 4)
+        if (data.length < 2) return null
+        return data.chunked(2).mapNotNull { it.toIntOrNull(16) }
     }
 
     /** Extrae los bytes de datos de una respuesta '62 <did> <bytes...>'. */

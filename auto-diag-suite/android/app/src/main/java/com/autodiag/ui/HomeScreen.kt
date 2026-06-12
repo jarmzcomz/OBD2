@@ -412,8 +412,8 @@ private fun VagTab(vm: VagViewModel) {
             OutlinedTextField(
                 value = securityCode,
                 onValueChange = { vm.setSecurityCode(it) },
-                label = { Text("Código de seguridad (opcional)", fontSize = 12.sp) },
-                placeholder = { Text("Pega aquí tu código de VCDS/OBDeleven", fontSize = 12.sp) },
+                label = { Text("Código de seguridad (opcional, anula el de fábrica)", fontSize = 12.sp) },
+                placeholder = { Text("Ej. 31347 — déjalo vacío para usar el conocido", fontSize = 12.sp) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -428,8 +428,10 @@ private fun VagTab(vm: VagViewModel) {
         }
         item {
             Text(
-                "Déjalo vacío si no tienes código: la app no enviará llaves al azar (eso evita " +
-                    "bloquear el módulo). Con código, intentará el acceso de seguridad antes de escribir.",
+                "La app ya trae los logins conocidos del MQB (módulo 09 → 31347, etc.) e intenta " +
+                    "el acceso una sola vez (sin reintentos, para no bloquear el módulo). Nota: muchos " +
+                    "ELM327 económicos fallan al ESCRIBIR en estos autos, y si tu T-Cross trae SFD, la " +
+                    "escritura requiere desbloqueo online de VW. Leer siempre funciona.",
                 color = Color(0xFF7C8AA5), fontSize = 10.sp
             )
         }

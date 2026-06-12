@@ -12,12 +12,19 @@ package com.autodiag.data
  */
 object VagCatalog {
 
-    /** Un módulo/centralita del vehículo con su par de IDs CAN para UDS. */
+    /**
+     * Un módulo/centralita del vehículo con su par de IDs CAN para UDS.
+     *
+     * [login] = código de acceso de seguridad ESTÁTICO conocido del MQB para ese
+     * módulo (servicio 27 nivel 1/2). En pre-SFD basta este número para habilitar
+     * la escritura de codificación; no se necesita el SA2 dinámico (eso es flasheo).
+     */
     data class Module(
         val address: String,   // nº VAG clásico (ej. "09")
         val name: String,      // nombre claro en español
         val reqId: String,     // CAN tx (header ELM327)
-        val rspId: String      // CAN rx esperado
+        val rspId: String,     // CAN rx esperado
+        val login: Int? = null // código de seguridad estático conocido (MQB)
     )
 
     /** Módulos VAG más comunes, en orden de utilidad para el usuario. */
@@ -26,10 +33,10 @@ object VagCatalog {
         Module("02", "Transmisión", "7E1", "7E9"),
         Module("03", "Frenos / ABS", "713", "77D"),
         Module("08", "Climatización / A/C", "746", "7B0"),
-        Module("09", "Electrónica central (luces, confort)", "70E", "778"),
+        Module("09", "Electrónica central (luces, confort)", "70E", "778", login = 31347),
         Module("15", "Airbags", "715", "77F"),
-        Module("17", "Tablero / Instrumentos", "714", "77E"),
-        Module("19", "Gateway (red del auto)", "710", "77A"),
+        Module("17", "Tablero / Instrumentos", "714", "77E", login = 47115),
+        Module("19", "Gateway (red del auto)", "710", "77A", login = 20103),
         Module("42", "Puerta conductor", "74F", "7B9"),
         Module("44", "Dirección asistida", "712", "77C"),
         Module("5F", "Sistema multimedia (MIB)", "773", "7DD")
