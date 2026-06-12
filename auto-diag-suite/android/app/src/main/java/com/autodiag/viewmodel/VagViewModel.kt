@@ -249,17 +249,37 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Lee el VIN del auto y lo muestra en texto. */
-    fun readVin() = oneShot("Leyendo número de serie (VIN)…") { r ->
-        // IMPORTANTE: tras un escaneo/volcado el filtro de recepción (AT CRA) queda
-        // fijo en el último módulo. Hay que restaurarlo o el VIN no llega. Para Modo
-        // 09 (OBD estándar) el motor responde en 7E8 con direccionamiento funcional.
-        r.sendRaw("AT CRA")     // limpia el filtro de recepción
-        r.sendRaw("AT AR")      // recepción automática de direcciones
-        r.sendRaw("AT SH 7DF")  // cabecera funcional OBD-II
-        val resp = r.sendRaw("09 02")
-        val ascii = UdsInterpreter.hexToAscii(resp)
-        if (ascii != null && ascii.length >= 10) "VIN del vehículo: ${ascii.takeLast(17)}"
-        else "No se pudo leer el VIN. Respuesta: ${UdsInterpreter.interpret(resp).plain}"
+    fun readVin() {
+        val r = repo() ?: return
+        if (_busy.value) return
+        _busy.value = true
+        _status.value = "Leyendo número de serie (VIN)…"
+        val log = StringBuilder("LECTURA VIN · Modo 09 Subservicio 02\n")
+        viewModelScope.launch {
+            try {
+                suspend fun send(cmd: String): String {
+                    val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                    log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                    return resp
+                }
+                // IMPORTANTE: tras un escaneo/volcado el filtro de recepción (AT CRA) queda
+                // fijo en el último módulo. Hay que restaurarlo o el VIN no llega. Para Modo
+                // 09 (OBD estándar) el motor responde en 7E8 con direccionamiento funcional.
+                send("AT CRA")     // limpia el filtro de recepción
+                send("AT AR")      // recepción automática de direcciones
+                send("AT SH 7DF")  // cabecera funcional OBD-II
+                val resp = send("09 02")
+                val ascii = UdsInterpreter.hexToAscii(resp)
+                _status.value = if (ascii != null && ascii.length >= 10) {
+                    "✓ VIN del vehículo: ${ascii.takeLast(17)}"
+                } else {
+                    "✗ No se pudo leer el VIN. Respuesta: ${UdsInterpreter.interpret(resp).plain}"
+                }
+                _diag.value = log.toString()
+            } finally {
+                _busy.value = false
+            }
+        }
     }
 
     /**
@@ -400,17 +420,26 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val seedResp = send("27 01")
         val seed = UdsInterpreter.interpret(seedResp, "27")
         if (!seed.ok) return "  (No se obtuvo la semilla: ${seed.plain})"
+
         // Si la semilla es toda ceros, el módulo ya está desbloqueado.
         val seedBytes = parseSeedBytes(seedResp)
-        if (seedBytes != null && seedBytes.all { it == 0 }) return "  (El módulo ya estaba desbloqueado ✓)"
+        if (seedBytes != null && seedBytes.all { it == 0 }) {
+            return "  (El módulo ya estaba desbloqueado ✓)"
+        }
 
-        val width = (seedBytes?.size ?: 3).coerceIn(2, 4)
+        // Si no se obtuvo la semilla, calcula con ancho por defecto
+        // Para MQB típicamente es 4 bytes, pero algunos módulos pueden ser 2 o 3
+        val width = (seedBytes?.size ?: 4).coerceIn(2, 4)
         val key = (0 until width).joinToString(" ") { i ->
             "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
         }
+
         val res = UdsInterpreter.interpret(send("27 02 $key"), "27")
-        return if (res.ok) "  (Acceso de seguridad concedido con login $login ✓)"
-        else "  (Login $login no aceptado: ${res.plain} — no se reintenta para no bloquear el módulo)"
+        return if (res.ok) {
+            "  (Acceso de seguridad concedido: login $login, semilla (${seedBytes?.size ?: "desconocido"} bytes), ancho clave $width ✓)"
+        } else {
+            "  (Login $login no aceptado: ${res.plain} — no se reintenta para no bloquear el módulo)"
+        }
     }
 
     /**

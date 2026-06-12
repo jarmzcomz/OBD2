@@ -585,19 +585,26 @@ private fun VagTab(vm: VagViewModel) {
                     Text("Oscuro máx", color = Color(0xFF7C8AA5), fontSize = 9.sp)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Box(
-                        modifier = Modifier.background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                        modifier = Modifier.weight(1f).background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
                             .clickable(enabled = !busy) { vm.readLightSensor() }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) { Text("Leer actual", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) { Text("Leer actual", color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
                     Box(
-                        modifier = Modifier.background(Color(0xFF7A5C00), RoundedCornerShape(8.dp))
+                        modifier = Modifier.weight(1f).background(Color(0xFF7A5C00), RoundedCornerShape(8.dp))
                             .clickable(enabled = !busy && lightSensorValue >= 0) {
                                 vm.writeLightSensorThreshold(sliderValue.toInt())
                             }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) { Text("Aplicar umbral", color = Color(0xFFFBD44A), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) { Text("Aplicar umbral", color = Color(0xFFFBD44A), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    Box(
+                        modifier = Modifier.weight(1f).background(Color(0xFF4B3A1F), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy && lightSensorValue >= 0) {
+                                sliderValue = 0x315B34D3.toFloat() // valor de fábrica (luz)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) { Text("Fábrica", color = Color(0xFFCDC8B1), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text("⚠ Después de aplicar, apaga y prende el contacto para que el módulo adopte el nuevo valor.",
