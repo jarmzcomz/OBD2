@@ -400,8 +400,9 @@ private fun VagTab(vm: VagViewModel) {
         }
         item {
             Text(
-                "⚠ Estas funciones son específicas de VW/Audi/SEAT/Škoda. La app lee el " +
-                    "estado real antes de cambiar nada. Si tu modelo no la soporta, el interruptor lo dirá.",
+                "⚠ Funciones para VW T-Cross (MQB A0). La app lee el estado real antes de " +
+                    "cambiar nada. Si tu módulo no la soporta o pide acceso de seguridad, el " +
+                    "interruptor te lo dirá en texto en vez de fallar a ciegas.",
                 color = Color(0xFFF59E0B), fontSize = 11.sp
             )
         }

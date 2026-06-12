@@ -1,13 +1,14 @@
 package com.autodiag.data
 
 /**
- * Catálogo VAG (VW / Audi / SEAT / Škoda) en lenguaje claro.
+ * Catálogo VAG en lenguaje claro, afinado para VW T-Cross (plataforma MQB A0,
+ * compartida con Polo AW, Virtus y Nivus).
  *
- * Mapea módulos y "funciones ocultas" conocidas a su dirección CAN/UDS y a la
- * receta de bytes, para que el usuario vea interruptores en español en vez de
- * hexadecimal. Las direcciones corresponden al esquema UDS de 11 bits típico de
- * plataformas modernas (MQB). En plataformas viejas (TP2.0) algunos módulos no
- * responden; por eso la app SIEMPRE lee primero el estado real antes de tocar nada.
+ * Mapea módulos y "funciones ocultas" a su dirección CAN/UDS y a la receta de
+ * bytes, para que el usuario vea interruptores en español en vez de hexadecimal.
+ * Las direcciones usan el esquema UDS de 11 bits del MQB A0. La app SIEMPRE lee
+ * primero el estado real antes de tocar nada, y muchos cambios requieren acceso
+ * de seguridad (seed→key) que la app intenta automáticamente.
  */
 object VagCatalog {
 
@@ -55,17 +56,12 @@ object VagCatalog {
     )
 
     /**
-     * Funciones populares y ampliamente documentadas en la comunidad VAG. La
-     * disponibilidad EXACTA depende del modelo/año; por eso cada interruptor
-     * muestra el estado leído del auto y, si el módulo no la soporta, lo dice.
+     * Funciones populares en el VW T-Cross / MQB A0 (Polo AW, Virtus, Nivus). La
+     * disponibilidad y la posición EXACTA del bit dependen de la versión de
+     * software de tu módulo; por eso cada interruptor muestra el estado leído del
+     * auto y, si el módulo no la soporta, lo dice en texto en vez de fallar a ciegas.
      */
     val features: List<Feature> = listOf(
-        Feature(
-            id = "lane_assist_default",
-            name = "Asistente de carril siempre encendido",
-            description = "Que el asistente de mantenimiento de carril arranque activo al encender el auto.",
-            moduleAddress = "03", didRead = "0600", byteIndex = 0, bitMask = 0x01
-        ),
         Feature(
             id = "needle_sweep",
             name = "Barrido de agujas al arrancar",
@@ -81,7 +77,7 @@ object VagCatalog {
         Feature(
             id = "mirror_fold",
             name = "Plegado de espejos al cerrar",
-            description = "Los espejos retrovisores se pliegan solos al cerrar el auto con la llave.",
+            description = "Los espejos se pliegan solos al cerrar (si tu T-Cross trae espejos eléctricos plegables).",
             moduleAddress = "09", didRead = "0600", byteIndex = 3, bitMask = 0x08
         ),
         Feature(
@@ -93,14 +89,26 @@ object VagCatalog {
         Feature(
             id = "drl_dimming",
             name = "Luces diurnas atenuadas con direccional",
-            description = "La luz de día se atenúa del lado donde pones la direccional.",
+            description = "La luz de día (DRL) se atenúa del lado donde pones la direccional.",
             moduleAddress = "09", didRead = "0600", byteIndex = 4, bitMask = 0x01
         ),
         Feature(
             id = "speed_lock",
             name = "Cierre automático en movimiento",
-            description = "Las puertas se aseguran solas al pasar cierta velocidad.",
+            description = "Las puertas se aseguran solas al pasar ~15 km/h.",
             moduleAddress = "09", didRead = "0600", byteIndex = 5, bitMask = 0x20
+        ),
+        Feature(
+            id = "tank_flap_horn",
+            name = "Confirmación sonora al cerrar",
+            description = "Un 'bip' del claxon al asegurar el auto con el control (chirp).",
+            moduleAddress = "09", didRead = "0600", byteIndex = 6, bitMask = 0x01
+        ),
+        Feature(
+            id = "menu_dev",
+            name = "Menús ocultos del tablero",
+            description = "Habilita pantallas extra (presión turbo, voltaje, etc.) en el display del clúster.",
+            moduleAddress = "17", didRead = "0600", byteIndex = 2, bitMask = 0x04, risk = "Medio"
         )
     )
 
