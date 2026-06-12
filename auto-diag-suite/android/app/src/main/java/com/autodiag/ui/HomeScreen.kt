@@ -443,6 +443,29 @@ private fun VagTab(vm: VagViewModel) {
                 color = Color(0xFFF59E0B), fontSize = 11.sp
             )
         }
+        // Volcado de codificación (solo lectura) para mapear con datos reales.
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text("🔍 Leer codificación real (solo lectura, sin riesgo)", color = Color(0xFF93B4E8),
+                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier.weight(1f).background(Color(0xFF142235), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy) { vm.dumpCoding("09") }.padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) { Text("Volcar 09 (luces/confort)", color = Color(0xFF9FB3C8), fontSize = 11.sp) }
+                    Box(
+                        modifier = Modifier.weight(1f).background(Color(0xFF142235), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy) { vm.dumpCoding("17") }.padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) { Text("Volcar 17 (tablero)", color = Color(0xFF9FB3C8), fontSize = 11.sp) }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Para el sensor de luz, vuelca el 09 y compártelo: ahí está el umbral a ajustar.",
+                    color = Color(0xFF7C8AA5), fontSize = 10.sp)
+            }
+        }
         // Campo opcional para pegar el código/llave de seguridad.
         item {
             OutlinedTextField(

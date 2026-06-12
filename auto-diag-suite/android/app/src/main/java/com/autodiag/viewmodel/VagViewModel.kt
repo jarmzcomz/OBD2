@@ -110,6 +110,40 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         else "No se pudo leer el VIN. Respuesta: ${UdsInterpreter.interpret(resp).plain}"
     }
 
+    /**
+     * Volcado READ-ONLY de la codificación y adaptaciones de un módulo. No escribe
+     * NADA: solo lee. Sirve para mapear con datos reales (qué byte/bit es cada
+     * función, dónde está el umbral del sensor de luz, etc.) en TU versión de
+     * software. Lee la codificación larga (DID 0600), identificación y un rango de
+     * DIDs de adaptación frecuentes en MQB. Todo se muestra en el panel de diagnóstico.
+     */
+    fun dumpCoding(addr: String) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress(addr) ?: return
+        _busy.value = true
+        _status.value = "Leyendo codificación del módulo ${mod.address} (solo lectura)…"
+        val log = StringBuilder("VOLCADO (solo lectura) · módulo ${mod.address} ${mod.name}\n" +
+            "tx ${mod.reqId} / rx ${mod.rspId}\n")
+        viewModelScope.launch {
+            suspend fun send(cmd: String): String {
+                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                return resp
+            }
+            selectModule(r, mod)
+            send("10 03")
+            send("22 F187") // nº de pieza VAG
+            send("22 F189") // versión de software
+            send("22 0600") // codificación larga
+            // DIDs de adaptación comunes en MQB (solo lectura, no hace daño).
+            for (did in listOf("0407", "0408", "02E0", "0293", "0296")) send("22 $did")
+            _status.value = "Volcado listo. Toca 'Copiar' y compártelo: con esto mapeo todo sin adivinar."
+            _diag.value = log.toString()
+            _busy.value = false
+        }
+    }
+
     /** Lee el estado actual de todos los interruptores de funciones. */
     fun loadFeatures() {
         val r = repo() ?: return
