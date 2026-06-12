@@ -73,6 +73,7 @@ import com.autodiag.model.PidData
 import com.autodiag.ui.components.DtcCard
 import com.autodiag.ui.components.GaugeView
 import com.autodiag.ui.components.LineChart
+import com.autodiag.viewmodel.AdvancedViewModel
 import com.autodiag.viewmodel.DashboardViewModel
 import com.autodiag.viewmodel.DiagnosticsViewModel
 import com.autodiag.viewmodel.DtcViewModel
@@ -87,7 +88,8 @@ fun HomeScreen(
     dashboardVm: DashboardViewModel = viewModel(),
     dtcVm: DtcViewModel = viewModel(),
     diagVm: DiagnosticsViewModel = viewModel(),
-    terminalVm: TerminalViewModel = viewModel()
+    terminalVm: TerminalViewModel = viewModel(),
+    advancedVm: AdvancedViewModel = viewModel()
 ) {
     LaunchedEffect(Unit) { dashboardVm.initialize() }
 
@@ -158,7 +160,7 @@ fun HomeScreen(
                 1 -> SensorsTab(pidData)
                 2 -> GraphsTab(pidData, history)
                 3 -> FallasTab(dtcVm)
-                4 -> MoreTab(diagVm, terminalVm, history, onDisconnect)
+                4 -> MoreTab(diagVm, terminalVm, advancedVm, history, onDisconnect)
             }
         }
     }
@@ -317,6 +319,7 @@ private fun FallasTab(dtcVm: DtcViewModel) {
 private fun MoreTab(
     diagVm: DiagnosticsViewModel,
     terminalVm: TerminalViewModel,
+    advancedVm: AdvancedViewModel,
     history: Map<String, List<Float>>,
     onDisconnect: () -> Unit
 ) {
@@ -373,6 +376,13 @@ private fun MoreTab(
         // --- Terminal de ingeniero ---
         SectionTitle("Terminal AT / OBD")
         TerminalPanel(terminalVm)
+
+        // --- Panel avanzado (solo en modo WiFi/backend) ---
+        if (advancedVm.available) {
+            Spacer(modifier = Modifier.height(8.dp))
+            SectionTitle("Panel avanzado (UDS / CAN / VAG)")
+            AdvancedPanel(advancedVm)
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -464,6 +474,81 @@ private fun TerminalPanel(vm: TerminalViewModel) {
         }
     }
 }
+
+@Composable
+private fun AdvancedPanel(vm: AdvancedViewModel) {
+    val output by vm.output.collectAsState()
+    val busy by vm.busy.collectAsState()
+    var ecu by remember { mutableStateOf("0x7E0") }
+    var did by remember { mutableStateOf("0xF190") }
+
+    Text(
+        "Operaciones servidas por el backend Python con Zero-Brick. Las escrituras " +
+            "exigen backup verificado en el servidor.",
+        color = Color(0xFF7C8AA5), fontSize = 11.sp
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        AdvChip("CAN", Modifier.weight(1f)) { vm.loadCanFrames() }
+        AdvChip("VAG", Modifier.weight(1f)) { vm.loadVagModules() }
+        AdvChip("Estado", Modifier.weight(1f)) { vm.loadHealth() }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // Lectura UDS por DID (solo lectura).
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = ecu, onValueChange = { ecu = it },
+            label = { Text("ECU", color = Color(0xFF7C8AA5), fontSize = 11.sp) },
+            singleLine = true, modifier = Modifier.weight(1f),
+            colors = monoFieldColors()
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        OutlinedTextField(
+            value = did, onValueChange = { did = it },
+            label = { Text("DID", color = Color(0xFF7C8AA5), fontSize = 11.sp) },
+            singleLine = true, modifier = Modifier.weight(1f),
+            colors = monoFieldColors()
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        IconButton(onClick = { vm.udsRead(ecu, did) }, enabled = !busy) {
+            Icon(Icons.Default.Send, contentDescription = "Leer UDS", tint = if (busy) Color(0xFF55627A) else Color(0xFF2563EB))
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Column(
+        modifier = Modifier.fillMaxWidth().height(180.dp)
+            .background(Color(0xFF0A0F1A), RoundedCornerShape(10.dp))
+            .border(1.dp, Color(0xFF1E2A3D), RoundedCornerShape(10.dp))
+            .verticalScroll(rememberScrollState()).padding(12.dp)
+    ) {
+        Text(output, color = Color(0xFFC8D2E0), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+    }
+}
+
+@Composable
+private fun AdvChip(label: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) { Text(label, color = Color(0xFF93B4E8), fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+}
+
+@Composable
+private fun monoFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Color(0xFF2563EB),
+    unfocusedBorderColor = Color(0xFF1E2A3D),
+    focusedTextColor = Color(0xFFE5EAF2),
+    unfocusedTextColor = Color(0xFFE5EAF2),
+    cursorColor = Color(0xFF2563EB),
+    focusedContainerColor = Color(0xFF131C2E),
+    unfocusedContainerColor = Color(0xFF131C2E)
+)
 
 @Composable
 private fun SectionTitle(text: String) {

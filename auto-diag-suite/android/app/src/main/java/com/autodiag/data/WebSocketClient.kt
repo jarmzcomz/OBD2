@@ -7,8 +7,10 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -86,4 +88,21 @@ class WebSocketRepository(address: String) : ObdRepository {
     override fun disconnect() { ws?.cancel() }
 
     override val capabilities = ObdCapabilities(backendAdvanced = true)
+
+    /** GET genérico al backend; devuelve el cuerpo crudo (JSON). Para el panel avanzado. */
+    suspend fun httpGet(path: String): String = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("$baseHttp/${path.trimStart('/')}").build()
+        runCatching {
+            client.newCall(req).execute().use { it.body?.string() ?: "" }
+        }.getOrElse { "ERROR: ${it.message}" }
+    }
+
+    /** POST JSON genérico al backend; devuelve el cuerpo crudo (JSON). */
+    suspend fun httpPost(path: String, json: String): String = withContext(Dispatchers.IO) {
+        val body = json.toRequestBody("application/json".toMediaType())
+        val req = Request.Builder().url("$baseHttp/${path.trimStart('/')}").post(body).build()
+        runCatching {
+            client.newCall(req).execute().use { it.body?.string() ?: "" }
+        }.getOrElse { "ERROR: ${it.message}" }
+    }
 }
