@@ -158,7 +158,7 @@ fun HomeScreen(
                 1 -> SensorsTab(pidData)
                 2 -> GraphsTab(pidData, history)
                 3 -> FallasTab(dtcVm)
-                4 -> MoreTab(diagVm, terminalVm, onDisconnect)
+                4 -> MoreTab(diagVm, terminalVm, history, onDisconnect)
             }
         }
     }
@@ -317,6 +317,7 @@ private fun FallasTab(dtcVm: DtcViewModel) {
 private fun MoreTab(
     diagVm: DiagnosticsViewModel,
     terminalVm: TerminalViewModel,
+    history: Map<String, List<Float>>,
     onDisconnect: () -> Unit
 ) {
     LaunchedEffect(Unit) { diagVm.refresh() }
@@ -346,6 +347,26 @@ private fun MoreTab(
         InfoRow("Voltaje batería", info.voltage ?: "—")
         if (info.pendingDtcs.isNotEmpty()) InfoRow("DTC pendientes", info.pendingDtcs.joinToString { it.code })
         if (info.permanentDtcs.isNotEmpty()) InfoRow("DTC permanentes", info.permanentDtcs.joinToString { it.code })
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // --- Exportar datos ---
+        SectionTitle("Registro de datos")
+        Button(
+            onClick = {
+                val file = com.autodiag.util.CsvExporter.export(context, history)
+                if (file != null) com.autodiag.util.CsvExporter.share(context, file)
+            },
+            enabled = history.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A), disabledContainerColor = Color(0xFF1E2A3D))
+        ) {
+            Text(
+                if (history.isEmpty()) "Sin datos para exportar" else "Exportar sesión a CSV",
+                color = Color.White, fontWeight = FontWeight.SemiBold
+            )
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
