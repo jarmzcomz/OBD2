@@ -133,6 +133,75 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     /** Limpia las fotos del sensor de luz para empezar de cero. */
     fun resetLightSnapshots() { snapLight = null; snapDark = null; _status.value = "Fotos del sensor borradas." }
 
+    // Valor actual del sensor de luz leído del módulo 09 (DID 02E0, 4 bytes big-endian).
+    private val _lightSensorValue = MutableStateFlow(-1)
+    val lightSensorValue: StateFlow<Int> = _lightSensorValue.asStateFlow()
+
+    /**
+     * Lee el valor actual del sensor de luz (DID 02E0 del módulo 09) y lo expone
+     * como un entero para mostrar en el slider. -1 = no leído / error.
+     */
+    fun readLightSensor() {
+        val r = repo() ?: return
+        if (_busy.value) return
+        _busy.value = true
+        _status.value = "Leyendo sensor de luz…"
+        val mod = VagCatalog.moduleByAddress("09") ?: return
+        viewModelScope.launch {
+            selectModule(r, mod)
+            runCatching { r.sendRaw("10 03") }
+            val resp = runCatching { r.sendRaw("22 02E0") }.getOrElse { "" }
+            val value = positiveValue(resp, "02E0")
+            if (value != null) {
+                val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
+                // Los 4 bytes forman un entero big-endian que representa la luminosidad.
+                val intVal = bytes.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
+                _lightSensorValue.value = intVal
+                _status.value = "Sensor de luz: 0x${"%08X".format(intVal)} ($intVal lux aprox.)"
+            } else {
+                _status.value = "No se pudo leer el sensor de luz. ${UdsInterpreter.interpret(resp).plain}"
+            }
+            _busy.value = false
+        }
+    }
+
+    /**
+     * Escribe un nuevo umbral de brillo al DID 02E0 del módulo 09. El parámetro
+     * [newValue] es el valor entero que el usuario seleccionó en el slider.
+     * SIEMPRE lee el bloque actual primero, luego escribe solo ese DID.
+     * Requiere acceso de seguridad (login 31347).
+     */
+    fun writeLightSensorThreshold(newValue: Int) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress("09") ?: return
+        _busy.value = true
+        _status.value = "Aplicando nuevo umbral del sensor de luz…"
+        val log = StringBuilder("ESCRITURA SENSOR DE LUZ · módulo 09\nNuevo valor: 0x${"%08X".format(newValue)} ($newValue)\n")
+        viewModelScope.launch {
+            suspend fun send(cmd: String): String {
+                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                return resp
+            }
+            selectModule(r, mod)
+            send("10 03")
+            val sec = attemptSecurityAccessLogged(r, mod, ::send)
+            // Empaqueta el valor como 4 bytes big-endian.
+            val b = (0..3).map { i -> "%02X".format((newValue shr (24 - i * 8)) and 0xFF) }.joinToString(" ")
+            val writeResp = send("2E 02E0 $b")
+            val result = UdsInterpreter.interpret(writeResp, "2E")
+            _status.value = if (result.ok) {
+                _lightSensorValue.value = newValue
+                "✓ Umbral del sensor de luz actualizado. Si las luces no reaccionan distinto, prueba reiniciando el contacto."
+            } else {
+                "No se pudo escribir el umbral: ${result.plain}$sec"
+            }
+            _diag.value = log.toString()
+            _busy.value = false
+        }
+    }
+
     /** Devuelve el valor (hex) de una respuesta positiva '62 <did> <bytes>', o null. */
     private fun positiveValue(raw: String, did: String): String? {
         val hex = raw.uppercase().replace(Regex("[^0-9A-F]"), "")

@@ -56,10 +56,13 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -314,18 +317,48 @@ private fun FallasTab(dtcVm: DtcViewModel) {
     val isLoading by dtcVm.isLoading.collectAsState()
     val error by dtcVm.error.collectAsState()
 
-    when {
-        isLoading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Color(0xFF2563EB)) }
-        error != null -> CenteredMessage("Error al leer DTCs", Color(0xFFEF4444), error ?: "")
-        dtcs.isEmpty() -> CenteredMessage("✓ Sin códigos de falla", Color(0xFF22C55E), "Tu vehículo está funcionando limpio.")
-        else -> Column {
-            Text(
-                "${dtcs.size} código${if (dtcs.size != 1) "s" else ""} almacenado${if (dtcs.size != 1) "s" else ""}",
-                color = Color(0xFF7C8AA5), fontSize = 13.sp,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-            )
-            LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
-                items(dtcs, key = { it.code }) { dtc -> DtcCard(dtc = dtc) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Botones de acción siempre visibles arriba.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { dtcVm.initialize() },
+                enabled = !isLoading,
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+            ) {
+                if (isLoading) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                else Text("🔍 Escanear fallas", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Button(
+                onClick = { dtcVm.clearDtcs() },
+                enabled = !isLoading && dtcs.isNotEmpty(),
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFEF4444),
+                    disabledContainerColor = Color(0xFF1E2A3D)
+                )
+            ) { Text("🗑 Borrar fallas", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+        }
+
+        // Contenido según estado.
+        when {
+            isLoading -> Box(Modifier.weight(1f), Alignment.Center) { CircularProgressIndicator(color = Color(0xFF2563EB)) }
+            error != null -> Box(Modifier.weight(1f)) { CenteredMessage("Error al leer DTCs", Color(0xFFEF4444), error ?: "") }
+            dtcs.isEmpty() -> Box(Modifier.weight(1f)) { CenteredMessage("✓ Sin códigos de falla", Color(0xFF22C55E), "Tu vehículo está funcionando limpio.") }
+            else -> Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "${dtcs.size} código${if (dtcs.size != 1) "s" else ""} almacenado${if (dtcs.size != 1) "s" else ""}",
+                    color = Color(0xFF7C8AA5), fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+                LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
+                    items(dtcs, key = { it.code }) { dtc -> DtcCard(dtc = dtc) }
+                }
             }
         }
     }
@@ -346,7 +379,14 @@ private fun VagTab(vm: VagViewModel) {
     val busy by vm.busy.collectAsState()
     val securityCode by vm.securityCode.collectAsState()
     val diag by vm.diag.collectAsState()
+    val lightSensorValue by vm.lightSensorValue.collectAsState()
     val clipboard = LocalClipboardManager.current
+    // Valor del slider (se inicializa del valor leído del auto).
+    var sliderValue by rememberSaveable { mutableStateOf(0f) }
+    // Sincroniza el slider cuando llega el valor del auto.
+    androidx.compose.runtime.LaunchedEffect(lightSensorValue) {
+        if (lightSensorValue >= 0) sliderValue = lightSensorValue.toFloat()
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -496,6 +536,72 @@ private fun VagTab(vm: VagViewModel) {
                     modifier = Modifier.background(Color(0xFF1A2438), RoundedCornerShape(8.dp))
                         .clickable(enabled = !busy) { vm.resetLightSnapshots() }.padding(horizontal = 12.dp, vertical = 6.dp)
                 ) { Text("Borrar capturas", color = Color(0xFF7C8AA5), fontSize = 10.sp) }
+            }
+        }
+        // Ajustador de umbral del sensor de luz (DID 02E0 módulo 09).
+        item {
+            Column(modifier = Modifier.fillMaxWidth()
+                .background(Color(0xFF0F1E2D), RoundedCornerShape(12.dp))
+                .border(1.dp, Color(0xFF1E4060), RoundedCornerShape(12.dp))
+                .padding(12.dp)) {
+                Text("💡 Ajustar umbral del sensor de luz", color = Color(0xFFFBD44A),
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Para compensar tu polarizado oscuro. Baja el valor si el auto siempre cree " +
+                    "que está oscuro (enciende luces de día). 'Leer actual' lee el valor de tu T-Cross ahora.",
+                    color = Color(0xFF9FB3C8), fontSize = 10.sp)
+                Spacer(modifier = Modifier.height(10.dp))
+                // Valor actual leído vs slider.
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Valor actual del auto:", color = Color(0xFF7C8AA5), fontSize = 11.sp)
+                    Text(
+                        if (lightSensorValue < 0) "—  (toca Leer actual)" else "0x${"%08X".format(lightSensorValue)}",
+                        color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Valor a escribir:", color = Color(0xFF7C8AA5), fontSize = 11.sp)
+                    Text("0x${"%08X".format(sliderValue.toInt())}  (${sliderValue.toInt()})",
+                        color = Color(0xFFFBD44A), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                // El rango del slider: 0 (siempre considera luz) a 0x3FFFFFFF (~máx que vimos).
+                // El valor LUZ de tu auto fue 0x315B34D3, la SOMBRA 0x0A27E547.
+                // Para compensar polarizado: bajar el umbral hacia la zona LUZ pero un poco más bajo.
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    valueRange = 0f..0x40000000.toFloat(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFFFBD44A),
+                        activeTrackColor = Color(0xFFFBD44A),
+                        inactiveTrackColor = Color(0xFF24344A)
+                    )
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0 (siempre día)", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                    Text("Oscuro máx", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier.background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy) { vm.readLightSensor() }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) { Text("Leer actual", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                    Box(
+                        modifier = Modifier.background(Color(0xFF7A5C00), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy && lightSensorValue >= 0) {
+                                vm.writeLightSensorThreshold(sliderValue.toInt())
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) { Text("Aplicar umbral", color = Color(0xFFFBD44A), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("⚠ Después de aplicar, apaga y prende el contacto para que el módulo adopte el nuevo valor.",
+                    color = Color(0xFFF59E0B), fontSize = 10.sp)
             }
         }
         // Campo opcional para pegar el código/llave de seguridad.
