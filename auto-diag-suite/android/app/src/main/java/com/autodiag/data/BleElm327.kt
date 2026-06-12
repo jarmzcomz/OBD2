@@ -47,9 +47,16 @@ class BleElm327Repository(
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> g.discoverServices()
+                // Pedir MTU grande ANTES de descubrir servicios: con el MTU por
+                // defecto (23) las respuestas multi-byte (VIN, freeze frame) se
+                // fragmentan. Si requestMtu falla, descubrimos igual.
+                BluetoothProfile.STATE_CONNECTED -> if (!g.requestMtu(517)) g.discoverServices()
                 BluetoothProfile.STATE_DISCONNECTED -> { ready = false }
             }
+        }
+
+        override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+            g.discoverServices()
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
@@ -147,26 +154,13 @@ class BleElm327Repository(
     }.flowOn(Dispatchers.IO)
 
     override val dtcs: Flow<List<String>> = flow {
-        val raw = send("03")
-        val codes = raw.split("\n")
-            .flatMap { it.trim().split(" ") }
-            .filter { it.length == 2 }
-            .chunked(2)
-            .mapNotNull { pair ->
-                if (pair.size == 2) decodeDtc(pair[0].toIntOrNull(16) ?: 0, pair[1].toIntOrNull(16) ?: 0) else null
-            }
-        emit(codes)
+        emit(DtcParser.parse(send("03"), "03"))
     }.flowOn(Dispatchers.IO)
 
     override suspend fun clearDtcs() { send("04") }
 
-    private fun decodeDtc(a: Int, b: Int): String? {
-        if (a == 0 && b == 0) return null
-        val prefix = arrayOf("P", "C", "B", "U")[(a and 0xC0) shr 6]
-        val d1 = (a and 0x30) shr 4
-        val d2 = a and 0x0F
-        val d3 = (b and 0xF0) shr 4
-        val d4 = b and 0x0F
-        return "$prefix$d1${d2.toString(16).uppercase()}${d3.toString(16).uppercase()}${d4.toString(16).uppercase()}"
-    }
+    override suspend fun sendRaw(command: String): String =
+        kotlinx.coroutines.withContext(Dispatchers.IO) { send(command) }
+
+    override val capabilities = ObdCapabilities(rawTerminal = true, canMonitor = true)
 }

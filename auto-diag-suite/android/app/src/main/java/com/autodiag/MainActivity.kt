@@ -9,15 +9,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavType
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import com.autodiag.ui.ConnectScreen
-import com.autodiag.ui.DashboardScreen
-import com.autodiag.ui.DtcScreen
+import com.autodiag.ui.HomeScreen
 import com.autodiag.ui.theme.AutoDiagTheme
+import com.autodiag.viewmodel.ConnectViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,42 +38,27 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AutoDiagApp() {
     val navController = rememberNavController()
+    // ConnectViewModel vive al nivel de la actividad: comparte la conexión entre pantallas.
+    val connectViewModel: ConnectViewModel = viewModel()
 
     NavHost(navController = navController, startDestination = "connect") {
         composable("connect") {
-            ConnectScreen(onConnected = { mode, address ->
-                navController.navigate("dashboard/$mode/$address")
-            })
-        }
-        composable(
-            route = "dashboard/{mode}/{address}",
-            arguments = listOf(
-                navArgument("mode") { type = NavType.StringType },
-                navArgument("address") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val mode = backStackEntry.arguments?.getString("mode") ?: "wifi"
-            val address = backStackEntry.arguments?.getString("address") ?: ""
-            DashboardScreen(
-                mode = mode,
-                address = address,
-                onNavigateToDtc = { navController.navigate("dtc/$mode/$address") },
-                onDisconnect = { navController.popBackStack() }
+            ConnectScreen(
+                connectViewModel = connectViewModel,
+                onConnected = { _, _ ->
+                    navController.navigate("dashboard") {
+                        popUpTo("connect") { inclusive = true }
+                    }
+                }
             )
         }
-        composable(
-            route = "dtc/{mode}/{address}",
-            arguments = listOf(
-                navArgument("mode") { type = NavType.StringType },
-                navArgument("address") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val mode = backStackEntry.arguments?.getString("mode") ?: "wifi"
-            val address = backStackEntry.arguments?.getString("address") ?: ""
-            DtcScreen(
-                mode = mode,
-                address = address,
-                onBack = { navController.popBackStack() }
+        composable("dashboard") {
+            HomeScreen(
+                onDisconnect = {
+                    navController.navigate("connect") {
+                        popUpTo("connect") { inclusive = true }
+                    }
+                }
             )
         }
     }

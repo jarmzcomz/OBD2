@@ -1,0 +1,464 @@
+package com.autodiag.viewmodel
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.autodiag.AutoDiagApplication
+import com.autodiag.data.UdsInterpreter
+import com.autodiag.data.VagCatalog
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+/** Estado de un módulo tras el escaneo. */
+data class ModuleStatus(
+    val address: String,
+    val name: String,
+    val present: Boolean,
+    val detail: String
+)
+
+/** Estado de un interruptor de función. */
+data class FeatureState(
+    val feature: VagCatalog.Feature,
+    val known: Boolean,     // ¿pudimos leer su estado?
+    val enabled: Boolean,   // estado actual
+    val note: String        // explicación en texto plano
+)
+
+/**
+ * Cerebro de la experiencia VAG en lenguaje claro: escanea las centralitas,
+ * lee identificación (VIN, nombre de sistema) y traduce todo a español. Para los
+ * interruptores lee SIEMPRE el estado real antes de permitir cambios.
+ */
+class VagViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val _modules = MutableStateFlow<List<ModuleStatus>>(emptyList())
+    val modules: StateFlow<List<ModuleStatus>> = _modules.asStateFlow()
+
+    private val _features = MutableStateFlow<List<FeatureState>>(emptyList())
+    val features: StateFlow<List<FeatureState>> = _features.asStateFlow()
+
+    private val _status = MutableStateFlow("Listo. Toca \"Escanear el auto\" para empezar.")
+    val status: StateFlow<String> = _status.asStateFlow()
+
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /**
+     * Registro crudo (hex) del último intento de cambio. Sirve para diagnosticar:
+     * el usuario lo comparte y se ve EXACTAMENTE qué respondió cada módulo, sin
+     * adivinar posiciones de bits. Vacío = no mostrar.
+     */
+    private val _diag = MutableStateFlow("")
+    val diag: StateFlow<String> = _diag.asStateFlow()
+
+    fun clearDiag() { _diag.value = "" }
+
+    /**
+     * Código/llave de seguridad que el usuario pega manualmente (ej. el "código de
+     * acceso" de VCDS/OBDeleven o una llave hex). Si está vacío, NO intentamos
+     * acceso de seguridad para evitar bloquear el módulo con llaves equivocadas.
+     */
+    private val _securityCode = MutableStateFlow("")
+    val securityCode: StateFlow<String> = _securityCode.asStateFlow()
+
+    fun setSecurityCode(code: String) { _securityCode.value = code.trim() }
+
+    // Dos "fotos" de las adaptaciones del módulo 09, tomadas con luz y con sombra,
+    // para encontrar el DID del sensor de luz por diferencia.
+    private var snapLight: Map<String, String>? = null
+    private var snapDark: Map<String, String>? = null
+
+    /**
+     * Escanea las adaptaciones del módulo 09 y guarda una "foto". Cuando existan
+     * las dos (luz y sombra), calcula la DIFERENCIA: los DIDs cuyo valor cambió son
+     * los candidatos al sensor de luz. Todo es SOLO LECTURA.
+     */
+    fun captureLightSnapshot(isLight: Boolean) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress("09") ?: return
+        _busy.value = true
+        _status.value = "Capturando adaptaciones del módulo 09 (${if (isLight) "con LUZ" else "con SOMBRA"})… espera."
+        viewModelScope.launch {
+            selectModule(r, mod)
+            runCatching { r.sendRaw("10 03") }
+            val snap = linkedMapOf<String, String>()
+            // Rango de adaptaciones frecuentes en MQB (solo lectura). Acotado para
+            // que no tarde demasiado por Bluetooth.
+            val ranges = listOf(0x0200..0x02FF, 0x0400..0x04FF, 0x0500..0x05FF)
+            var done = 0
+            val total = ranges.sumOf { it.count() }
+            for (range in ranges) {
+                for (did in range) {
+                    val didHex = "%04X".format(did)
+                    val resp = runCatching { r.sendRaw("22 $didHex") }.getOrElse { "" }
+                    val value = positiveValue(resp, didHex)
+                    if (value != null) snap[didHex] = value
+                    done++
+                    if (done % 32 == 0) _status.value = "Escaneando 09… $done/$total (${snap.size} adaptaciones)"
+                }
+            }
+            if (isLight) snapLight = snap else snapDark = snap
+            _diag.value = buildLightDiff(snap, isLight)
+            _status.value = if (snapLight != null && snapDark != null)
+                "Listo: comparé luz vs sombra. Mira los DIDs que cambiaron abajo (ese es el sensor)."
+            else "Foto '${if (isLight) "LUZ" else "SOMBRA"}' guardada (${snap.size} adaptaciones). Ahora toma la otra."
+            _busy.value = false
+        }
+    }
+
+    /** Construye el texto del panel: foto actual + diferencia si hay ambas. */
+    private fun buildLightDiff(current: Map<String, String>, isLight: Boolean): String {
+        val sb = StringBuilder("ADAPTACIONES 09 · foto '${if (isLight) "LUZ" else "SOMBRA"}' (${current.size} DIDs)\n")
+        val a = snapLight; val b = snapDark
+        if (a != null && b != null) {
+            sb.append("\n=== DIFERENCIAS LUZ vs SOMBRA (candidatos al sensor) ===\n")
+            val keys = (a.keys + b.keys).toSortedSet()
+            var changes = 0
+            for (k in keys) {
+                val va = a[k]; val vb = b[k]
+                if (va != vb) { sb.append("DID $k:  LUZ=$va   SOMBRA=$vb\n"); changes++ }
+            }
+            if (changes == 0) sb.append("(Ningún DID cambió. Prueba con más contraste de luz, o el sensor está en otro rango.)\n")
+            else sb.append("\nComparte esto: el DID que cambia con la luz es el del sensor.\n")
+        } else {
+            for ((k, v) in current) sb.append("DID $k = $v\n")
+        }
+        return sb.toString()
+    }
+
+    /** Limpia las fotos del sensor de luz para empezar de cero. */
+    fun resetLightSnapshots() { snapLight = null; snapDark = null; _status.value = "Fotos del sensor borradas." }
+
+    // Valor actual del sensor de luz leído del módulo 09 (DID 02E0, 4 bytes big-endian).
+    private val _lightSensorValue = MutableStateFlow(-1)
+    val lightSensorValue: StateFlow<Int> = _lightSensorValue.asStateFlow()
+
+    /**
+     * Lee el valor actual del sensor de luz (DID 02E0 del módulo 09) y lo expone
+     * como un entero para mostrar en el slider. -1 = no leído / error.
+     */
+    fun readLightSensor() {
+        val r = repo() ?: return
+        if (_busy.value) return
+        _busy.value = true
+        _status.value = "Leyendo sensor de luz…"
+        val mod = VagCatalog.moduleByAddress("09") ?: return
+        viewModelScope.launch {
+            selectModule(r, mod)
+            runCatching { r.sendRaw("10 03") }
+            val resp = runCatching { r.sendRaw("22 02E0") }.getOrElse { "" }
+            val value = positiveValue(resp, "02E0")
+            if (value != null) {
+                val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
+                // Los 4 bytes forman un entero big-endian que representa la luminosidad.
+                val intVal = bytes.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
+                _lightSensorValue.value = intVal
+                _status.value = "Sensor de luz: 0x${"%08X".format(intVal)} ($intVal lux aprox.)"
+            } else {
+                _status.value = "No se pudo leer el sensor de luz. ${UdsInterpreter.interpret(resp).plain}"
+            }
+            _busy.value = false
+        }
+    }
+
+    /**
+     * Escribe un nuevo umbral de brillo al DID 02E0 del módulo 09. El parámetro
+     * [newValue] es el valor entero que el usuario seleccionó en el slider.
+     * SIEMPRE lee el bloque actual primero, luego escribe solo ese DID.
+     * Requiere acceso de seguridad (login 31347).
+     */
+    fun writeLightSensorThreshold(newValue: Int) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress("09") ?: return
+        _busy.value = true
+        _status.value = "Aplicando nuevo umbral del sensor de luz…"
+        val log = StringBuilder("ESCRITURA SENSOR DE LUZ · módulo 09\nNuevo valor: 0x${"%08X".format(newValue)} ($newValue)\n")
+        viewModelScope.launch {
+            suspend fun send(cmd: String): String {
+                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                return resp
+            }
+            selectModule(r, mod)
+            send("10 03")
+            val sec = attemptSecurityAccessLogged(r, mod, ::send)
+            // Empaqueta el valor como 4 bytes big-endian.
+            val b = (0..3).map { i -> "%02X".format((newValue shr (24 - i * 8)) and 0xFF) }.joinToString(" ")
+            val writeResp = send("2E 02E0 $b")
+            val result = UdsInterpreter.interpret(writeResp, "2E")
+            _status.value = if (result.ok) {
+                _lightSensorValue.value = newValue
+                "✓ Umbral del sensor de luz actualizado. Si las luces no reaccionan distinto, prueba reiniciando el contacto."
+            } else {
+                "No se pudo escribir el umbral: ${result.plain}$sec"
+            }
+            _diag.value = log.toString()
+            _busy.value = false
+        }
+    }
+
+    /** Devuelve el valor (hex) de una respuesta positiva '62 <did> <bytes>', o null. */
+    private fun positiveValue(raw: String, did: String): String? {
+        val hex = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
+        val marker = "62$did"
+        val pos = hex.indexOf(marker)
+        if (pos < 0) return null
+        val data = hex.substring(pos + marker.length)
+        if (data.length < 2) return null
+        return data.chunked(2).joinToString(" ")
+    }
+
+    val available: Boolean
+        get() = getApplication<AutoDiagApplication>().activeRepository?.capabilities?.rawTerminal == true
+
+    private fun repo() = getApplication<AutoDiagApplication>().activeRepository
+
+    /** Recorre todos los módulos VAG conocidos y reporta cuáles responden, en texto. */
+    fun scanModules() {
+        val r = repo() ?: return
+        if (_busy.value) return
+        _busy.value = true
+        _status.value = "Escaneando módulos del auto…"
+        viewModelScope.launch {
+            val result = mutableListOf<ModuleStatus>()
+            for (m in VagCatalog.modules) {
+                _status.value = "Consultando: ${m.name}…"
+                selectModule(r, m)
+                // Pedimos el nombre del sistema / VIN para confirmar presencia.
+                val resp = runCatching { r.sendRaw("22 F197") }.getOrElse { "" }
+                val reading = UdsInterpreter.interpret(resp, "22")
+                val ascii = UdsInterpreter.hexToAscii(resp)
+                val present = reading.ok || ascii != null
+                val detail = when {
+                    ascii != null && ascii.length > 2 -> "Identificado como: $ascii"
+                    reading.ok -> "Responde correctamente."
+                    else -> reading.plain
+                }
+                result.add(ModuleStatus(m.address, m.name, present, detail))
+                _modules.value = result.toList()
+            }
+            val n = result.count { it.present }
+            _status.value = "Escaneo terminado: $n de ${result.size} módulos respondieron."
+            _busy.value = false
+        }
+    }
+
+    /** Lee el VIN del auto y lo muestra en texto. */
+    fun readVin() = oneShot("Leyendo número de serie (VIN)…") { r ->
+        // IMPORTANTE: tras un escaneo/volcado el filtro de recepción (AT CRA) queda
+        // fijo en el último módulo. Hay que restaurarlo o el VIN no llega. Para Modo
+        // 09 (OBD estándar) el motor responde en 7E8 con direccionamiento funcional.
+        r.sendRaw("AT CRA")     // limpia el filtro de recepción
+        r.sendRaw("AT AR")      // recepción automática de direcciones
+        r.sendRaw("AT SH 7DF")  // cabecera funcional OBD-II
+        val resp = r.sendRaw("09 02")
+        val ascii = UdsInterpreter.hexToAscii(resp)
+        if (ascii != null && ascii.length >= 10) "VIN del vehículo: ${ascii.takeLast(17)}"
+        else "No se pudo leer el VIN. Respuesta: ${UdsInterpreter.interpret(resp).plain}"
+    }
+
+    /**
+     * Volcado READ-ONLY de la codificación y adaptaciones de un módulo. No escribe
+     * NADA: solo lee. Sirve para mapear con datos reales (qué byte/bit es cada
+     * función, dónde está el umbral del sensor de luz, etc.) en TU versión de
+     * software. Lee la codificación larga (DID 0600), identificación y un rango de
+     * DIDs de adaptación frecuentes en MQB. Todo se muestra en el panel de diagnóstico.
+     */
+    fun dumpCoding(addr: String) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress(addr) ?: return
+        _busy.value = true
+        _status.value = "Leyendo codificación del módulo ${mod.address} (solo lectura)…"
+        val log = StringBuilder("VOLCADO (solo lectura) · módulo ${mod.address} ${mod.name}\n" +
+            "tx ${mod.reqId} / rx ${mod.rspId}\n")
+        viewModelScope.launch {
+            suspend fun send(cmd: String): String {
+                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                return resp
+            }
+            selectModule(r, mod)
+            send("10 03")
+            send("22 F187") // nº de pieza VAG
+            send("22 F189") // versión de software
+            send("22 0600") // codificación larga
+            // DIDs de adaptación comunes en MQB (solo lectura, no hace daño).
+            for (did in listOf("0407", "0408", "02E0", "0293", "0296")) send("22 $did")
+            _status.value = "Volcado listo. Toca 'Copiar' y compártelo: con esto mapeo todo sin adivinar."
+            _diag.value = log.toString()
+            _busy.value = false
+        }
+    }
+
+    /** Lee el estado actual de todos los interruptores de funciones. */
+    fun loadFeatures() {
+        val r = repo() ?: return
+        if (_busy.value) return
+        _busy.value = true
+        _status.value = "Leyendo configuración actual del auto…"
+        viewModelScope.launch {
+            val states = mutableListOf<FeatureState>()
+            for (f in VagCatalog.features) {
+                val mod = VagCatalog.moduleByAddress(f.moduleAddress)
+                if (mod == null) { states.add(FeatureState(f, false, false, "Módulo desconocido.")); continue }
+                selectModule(r, mod)
+                runCatching { r.sendRaw("10 03") } // sesión extendida
+                val resp = runCatching { r.sendRaw("22 ${f.didRead}") }.getOrElse { "" }
+                val block = parseBlock(resp, f.didRead)
+                val state = if (block != null && f.byteIndex < block.size) {
+                    val bitSet = (block[f.byteIndex] and f.bitMask) != 0
+                    val enabled = if (f.onMeansSet) bitSet else !bitSet
+                    FeatureState(f, true, enabled, if (enabled) "Activado ahora" else "Desactivado ahora")
+                } else {
+                    FeatureState(f, false, false, "Tu modelo no expone esta función o no respondió.")
+                }
+                states.add(state)
+                _features.value = states.toList()
+            }
+            _status.value = "Configuración leída. Toca un interruptor para cambiarlo."
+            _busy.value = false
+        }
+    }
+
+    /**
+     * Cambia una función: lee el bloque, voltea el bit y lo reescribe. Si la ECU
+     * pide acceso de seguridad, lo explica en texto plano (sin dejar al usuario
+     * con un código hex).
+     */
+    fun toggleFeature(f: VagCatalog.Feature, turnOn: Boolean) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress(f.moduleAddress) ?: return
+        _busy.value = true
+        _status.value = "Aplicando: ${f.name} → ${if (turnOn) "ACTIVAR" else "DESACTIVAR"}…"
+        val log = StringBuilder("DIAGNÓSTICO · ${f.name}\nMódulo ${mod.address} (tx ${mod.reqId}/rx ${mod.rspId})\n")
+        viewModelScope.launch {
+            // Helper local: envía un comando, registra el hex crudo y lo devuelve.
+            suspend fun send(cmd: String): String {
+                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error: ${it.message}>" }
+                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                return resp
+            }
+            selectModule(r, mod)
+            send("10 03") // sesión extendida
+            // 1) Leer el bloque de codificación ANTES de tocar nada.
+            val resp = send("22 ${f.didRead}")
+            val block = parseBlock(resp, f.didRead)?.toMutableList()
+            if (block == null) {
+                _status.value = "No pude leer la codificación del módulo, así que NO escribí nada (seguro). " +
+                    "Comparte el diagnóstico de abajo y te digo el siguiente paso."
+                _diag.value = log.toString()
+                _busy.value = false; return@launch
+            }
+            // 2) Acceso de seguridad (registrado en el log).
+            val sec = attemptSecurityAccessLogged(r, mod, ::send)
+            // 3) Si el bit objetivo cae fuera del bloque, NO inventamos: avisamos.
+            if (f.byteIndex >= block.size) {
+                _status.value = "Leí la codificación pero el dato de '${f.name}' no está donde se esperaba en TU " +
+                    "versión de software. NO escribí nada. Comparte el diagnóstico de abajo y te doy la posición exacta."
+                _diag.value = log.toString()
+                _busy.value = false; return@launch
+            }
+            val setBit = if (f.onMeansSet) turnOn else !turnOn
+            block[f.byteIndex] = if (setBit) block[f.byteIndex] or f.bitMask
+            else block[f.byteIndex] and f.bitMask.inv()
+            val payload = block.joinToString(" ") { "%02X".format(it and 0xFF) }
+            val write = send("2E ${f.didRead} $payload")
+            val reading = UdsInterpreter.interpret(write, "2E")
+            _status.value = if (reading.ok) "✓ Listo: '${f.name}' quedó ${if (turnOn) "activado" else "desactivado"}."
+            else "No se pudo cambiar '${f.name}'. ${reading.plain}$sec\n\nComparte el diagnóstico de abajo para afinarlo."
+            _diag.value = log.toString()
+            loadFeatures()
+            _busy.value = false
+        }
+    }
+
+    /**
+     * Acceso de seguridad UDS estático (servicio 0x27 nivel 1/2), como hace VCDS
+     * para codificar en MQB pre-SFD. Usa el login conocido del módulo (ej. 09 →
+     * 31347) o, si el usuario pegó uno, ese. Pide la semilla (27 01), codifica el
+     * login en big-endian con el mismo número de bytes que la semilla y lo envía
+     * (27 02). UN SOLO intento: si falla, NO reintenta (así no se dispara el
+     * bloqueo de ~20 min por exceso de intentos).
+     */
+    private suspend fun attemptSecurityAccessLogged(
+        r: com.autodiag.data.ObdRepository,
+        mod: VagCatalog.Module,
+        send: suspend (String) -> String
+    ): String {
+        // Prioridad: código pegado por el usuario; si no, login conocido del módulo.
+        val userCode = _securityCode.value.replace(Regex("[^0-9]"), "").toIntOrNull()
+        val login = userCode ?: mod.login
+        if (login == null) return "  (Sin código de seguridad para este módulo: se intentó escribir directo.)"
+
+        val seedResp = send("27 01")
+        val seed = UdsInterpreter.interpret(seedResp, "27")
+        if (!seed.ok) return "  (No se obtuvo la semilla: ${seed.plain})"
+        // Si la semilla es toda ceros, el módulo ya está desbloqueado.
+        val seedBytes = parseSeedBytes(seedResp)
+        if (seedBytes != null && seedBytes.all { it == 0 }) return "  (El módulo ya estaba desbloqueado ✓)"
+
+        val width = (seedBytes?.size ?: 3).coerceIn(2, 4)
+        val key = (0 until width).joinToString(" ") { i ->
+            "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
+        }
+        val res = UdsInterpreter.interpret(send("27 02 $key"), "27")
+        return if (res.ok) "  (Acceso de seguridad concedido con login $login ✓)"
+        else "  (Login $login no aceptado: ${res.plain} — no se reintenta para no bloquear el módulo)"
+    }
+
+    /**
+     * Selecciona un módulo en el ELM327. No basta con poner el header de envío
+     * (AT SH): hay que decirle al adaptador qué ID CAN aceptar de respuesta
+     * (AT CRA), si no filtra todo lo que no sea 7E8-7EF y los módulos como 09/17
+     * (que responden en 778/77E) parecen "no responder". También configuramos el
+     * control de flujo ISO-TP para respuestas multi-trama (codificaciones largas).
+     */
+    private suspend fun selectModule(r: com.autodiag.data.ObdRepository, mod: VagCatalog.Module) {
+        runCatching { r.sendRaw("AT SH ${mod.reqId}") }
+        runCatching { r.sendRaw("AT CRA ${mod.rspId}") }
+        runCatching { r.sendRaw("AT FC SH ${mod.reqId}") }
+        runCatching { r.sendRaw("AT FC SD 30 00 00") }
+        runCatching { r.sendRaw("AT FC SM 1") }
+    }
+
+    /** Extrae los bytes de semilla de una respuesta '67 01 <seed...>'. */
+    private fun parseSeedBytes(raw: String): List<Int>? {
+        val hex = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
+        val pos = hex.indexOf("6701")
+        if (pos < 0) return null
+        val data = hex.substring(pos + 4)
+        if (data.length < 2) return null
+        return data.chunked(2).mapNotNull { it.toIntOrNull(16) }
+    }
+
+    /** Extrae los bytes de datos de una respuesta '62 <did> <bytes...>'. */
+    private fun parseBlock(raw: String, did: String): List<Int>? {
+        val hex = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
+        val didClean = did.uppercase().replace(" ", "")
+        // Respuesta positiva a 22 es 62; busca 62 + DID y toma lo que sigue.
+        val marker = "62$didClean"
+        val pos = hex.indexOf(marker)
+        if (pos < 0) return null
+        val dataHex = hex.substring(pos + marker.length)
+        if (dataHex.length < 2) return null
+        return dataHex.chunked(2).mapNotNull { it.toIntOrNull(16) }
+    }
+
+    private fun oneShot(msg: String, block: suspend (com.autodiag.data.ObdRepository) -> String) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        _busy.value = true
+        _status.value = msg
+        viewModelScope.launch {
+            _status.value = runCatching { block(r) }.getOrElse { "Error: ${it.message}" }
+            _busy.value = false
+        }
+    }
+}

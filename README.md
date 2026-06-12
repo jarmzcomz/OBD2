@@ -1,489 +1,282 @@
 <p align="center">
-  <h1 align="center">The Architect</h1>
+  <h1 align="center">Auto-Diag Suite</h1>
   <p align="center">
-    <strong>A Claude Code meta-agent that designs complete software blueprints.</strong>
+    <strong>Suite de diagnóstico vehicular OBD-II con soporte Bluetooth y WebSocket</strong>
   </p>
   <p align="center">
-    Describe what you want to build. Get a complete blueprint. Let Claude Code build it for you.
+    Lectura y escritura de parámetros de diagnóstico en vehículos OBD-II · Soporte múltiples transportes · Dashboard en vivo
   </p>
   <p align="center">
-    <a href="https://tododeia.com">tododeia.com</a> &middot;
-    <a href="#english">English</a> &middot;
-    <a href="#español">Español</a>
+    <a href="#español">Español</a> &middot;
+    <a href="#english">English</a>
   </p>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Claude_Code-Agent-blueviolet?style=for-the-badge" alt="Claude Code Agent" />
-  <img src="https://img.shields.io/badge/Blueprints-Markdown-blue?style=for-the-badge" alt="Markdown Blueprints" />
+  <img src="https://img.shields.io/badge/Android-Kotlin-green?style=for-the-badge" alt="Android Kotlin" />
+  <img src="https://img.shields.io/badge/Bluetooth-Classic%20%26%20LE-blue?style=for-the-badge" alt="Bluetooth Classic & LE" />
+  <img src="https://img.shields.io/badge/OBD--II-ELM327-orange?style=for-the-badge" alt="OBD-II ELM327" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="MIT License" />
-  <img src="https://img.shields.io/badge/by-tododeia.com-black?style=for-the-badge" alt="by tododeia.com" />
 </p>
 
 ---
 
-# English
-
-## What is The Architect?
-
-Imagine you want to build a house. Before anyone picks up a hammer, you need a **blueprint** — a detailed plan that shows every room, every wall, every pipe, and every wire. Without it, the builders wouldn't know what to do.
-
-**The Architect does this for software.**
-
-You open this project in [Claude Code](https://claude.com/claude-code), tell it what you want to build (a website, an app, a SaaS, an API — anything), and The Architect:
-
-1. **Asks you smart questions** about your idea
-2. **Designs the entire system** — database, API, frontend, auth, payments, everything
-3. **Generates a blueprint file** (`.md`) so detailed that another Claude Code instance can build the whole thing — step by step, without asking you anything
-
-Think of it like this:
-
-```
-You: "I want to build a project management app like Trello"
-         ↓
-The Architect: asks questions, designs everything
-         ↓
-Blueprint.md: complete plan with tech stack, database schema,
-              API routes, component hierarchy, build order...
-         ↓
-Claude Code: reads the blueprint → builds the entire app
-```
-
-**You describe the idea. The Architect creates the plan. Claude Code builds it.**
-
----
-
-## How It Works
-
-The Architect follows a 4-phase workflow:
-
-### Phase 1: Discovery
-> "What are you building? Who is it for? How big should it be?"
-
-The Architect asks 2-3 questions to understand your idea. Based on your answers, it classifies your project into one of **6 archetypes** (project types).
-
-### Phase 2: Deep Dive
-> "Do you need user accounts? Payments? Real-time features?"
-
-Now it asks questions specific to YOUR type of project. It also researches best practices using skills like `/deep-research`.
-
-### Phase 3: Architecture
-> "Here's what I'd build: Next.js + Supabase + Clerk + Stripe on Vercel..."
-
-The Architect presents the complete tech stack and architecture with reasons for every decision. You confirm or adjust. For frontend projects, it designs a full visual system (colors, fonts, spacing) using `/ui-ux-pro-max`.
-
-### Phase 4: Generate
-The Architect produces the final blueprint — a single `.md` file with **16 sections** covering everything Claude Code needs to build your project from zero to deployed.
-
----
-
-## The Blueprint: 16 Sections
-
-Every blueprint The Architect generates includes:
-
-| # | Section | What It Contains |
-|---|---------|-----------------|
-| 1 | Project Overview | Vision, goals, success metrics |
-| 2 | Tech Stack | Every technology with rationale |
-| 3 | Directory Structure | Full file tree with explanations |
-| 4 | Data Model | Entities, fields, relationships, SQL schema |
-| 5 | API Design | Routes, endpoints, request/response shapes |
-| 6 | Frontend Architecture | Pages, components, state management |
-| 7 | Design System | Colors, fonts, spacing, component style |
-| 8 | Auth & Authorization | Login flow, roles, permissions |
-| 9 | **Build Order** | Step-by-step: what to build first, second, third... |
-| 10 | Environment Setup | Prerequisites, env vars, initial commands |
-| 11 | Dependencies | Every package with its purpose |
-| 12 | Deployment | Hosting, CI/CD, domains |
-| 13 | Testing | What to test, which tools, when |
-| 14 | Skills to Use | Which Claude Code skills help during the build |
-| 15 | **CLAUDE.md** | Complete instructions for the builder — ready to paste |
-| 16 | Rules | Non-negotiable constraints for the build |
-
-**Section 9 (Build Order) is the most important.** It tells Claude Code exactly what to build and in what order — so it can work autonomously without asking you questions.
-
----
-
-## Supported Project Types
-
-The Architect knows how to design **6 types of projects**, each with its own default stack, directory structure, and build order:
-
-| Type | Examples | Default Stack |
-|------|----------|--------------|
-| **SaaS / Web App** | Trello, Notion, Slack | Next.js + Supabase + Clerk + Stripe + Vercel |
-| **Marketing Site** | Landing pages, portfolios | Astro + Tailwind + Sanity + Vercel |
-| **Mobile App** | iOS/Android apps | Expo (React Native) + Supabase + NativeWind |
-| **API / Backend** | REST APIs, microservices | Hono + Drizzle + PostgreSQL + Railway |
-| **Internal Tool** | Admin panels, dashboards | Next.js + shadcn/ui + Prisma + Recharts |
-| **Content Platform** | Blogs, docs, CMS | Next.js + Sanity + Algolia + Vercel |
-
-Don't see your project type? The Architect adapts — these are starting points, not limits.
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- [Claude Code](https://claude.com/claude-code) installed
-- A Claude API subscription
-
-### Installation
-
-```bash
-# Clone this repo
-git clone https://github.com/Hainrixz/the-architect.git
-
-# Open the project in Claude Code
-cd the-architect
-claude
-```
-
-That's it. Claude Code reads the `CLAUDE.md` file and becomes The Architect.
-
-### Usage
-
-**Step 1:** Tell The Architect what you want to build:
-
-```
-You: I want to build a SaaS for managing restaurant reservations
-     with team accounts, Stripe payments, and a customer-facing booking page.
-```
-
-**Step 2:** Answer the questions (2-3 at a time, conversational).
-
-**Step 3:** Review the proposed architecture. Confirm or adjust.
-
-**Step 4:** The Architect generates your blueprint at `output/<project-name>-blueprint.md`.
-
-**Step 5:** Use the blueprint to build your project:
-
-```bash
-# Create your new project
-mkdir ~/my-restaurant-saas
-cp output/restaurant-saas-blueprint.md ~/my-restaurant-saas/CLAUDE.md
-
-# Open it in Claude Code — it builds everything from the blueprint
-cd ~/my-restaurant-saas
-claude
-```
-
-### Fast-Track Mode
-
-Don't want to answer many questions? Say:
-
-```
-You: Build me a SaaS for restaurant reservations. Just build it.
-```
-
-The Architect asks only 3 essential questions and uses smart defaults for everything else.
-
----
-
-## Project Structure
-
-```
-the-architect/
-├── CLAUDE.md                          # The brain — makes Claude become The Architect
-├── knowledge/
-│   ├── archetypes/                    # 6 project type templates
-│   │   ├── saas-webapp.md             #   SaaS apps
-│   │   ├── marketing-site.md          #   Landing pages
-│   │   ├── mobile-app.md              #   Mobile apps
-│   │   ├── api-backend.md             #   APIs & backends
-│   │   ├── internal-tool.md           #   Admin panels
-│   │   └── content-platform.md        #   Blogs & CMS
-│   ├── building-blocks/               # 8 cross-cutting decision guides
-│   │   ├── auth-patterns.md           #   Authentication options
-│   │   ├── database-patterns.md       #   Database & ORM choices
-│   │   ├── deployment-patterns.md     #   Hosting & CI/CD
-│   │   ├── api-design-patterns.md     #   REST vs tRPC vs GraphQL
-│   │   ├── frontend-stacks.md         #   Framework comparisons
-│   │   ├── testing-patterns.md        #   Testing strategies
-│   │   ├── styling-systems.md         #   CSS & design tokens
-│   │   └── state-management.md        #   State & real-time patterns
-│   ├── skills-registry.md             # Maps Claude Code skills to blueprint sections
-│   └── stack-compatibility.md         # What works together (and what doesn't)
-├── templates/
-│   ├── blueprint-template.md          # The 16-section output skeleton
-│   └── claude-md-template.md          # Template for the target project's CLAUDE.md
-├── questions/
-│   ├── phase-1-discovery.md           # Universal discovery questions
-│   ├── phase-2-branches.md            # Archetype-specific deep dives
-│   └── phase-3-confirmation.md        # Architecture confirmation
-└── output/                            # Generated blueprints go here
-```
-
----
-
-## Skills Integration
-
-The Architect leverages Claude Code skills during the design process:
-
-| Skill | Used For |
-|-------|----------|
-| `/deep-research` | Researching technologies and best practices |
-| `/ui-ux-pro-max` | Designing visual systems (colors, fonts, spacing) |
-| `/find-skills` | Discovering skills to recommend for the build phase |
-| `/playwright-cli` | Analyzing reference sites |
-
-And recommends skills for the **build phase** in the blueprint:
-
-| Skill | Recommended For |
-|-------|----------------|
-| `/frontend-design` | Building production-grade UIs |
-| `/shadcn-ui` | Setting up component libraries |
-| `/seo-audit` | SEO auditing after build |
-| `/humanizer` | Making content sound natural |
-
----
-
-## Contributing
-
-Contributions are welcome! You can help by:
-
-- **Adding new archetypes** — new project types in `knowledge/archetypes/`
-- **Improving building blocks** — better decision matrices, newer tech options
-- **Enhancing the blueprint template** — more sections, better structure
-- **Translating** — help make The Architect accessible in more languages
-
----
-
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
-
----
-
-## Built by [tododeia.com](https://tododeia.com)
-
----
----
-
 # Español
 
-## Que es The Architect?
+## ¿Qué es Auto-Diag Suite?
 
-Imagina que quieres construir una casa. Antes de que alguien agarre un martillo, necesitas un **plano** — un plan detallado que muestre cada cuarto, cada pared, cada tuberia y cada cable. Sin el, los constructores no sabrian que hacer.
+Auto-Diag Suite es una **suite completa de diagnóstico automotriz** que te permite:
 
-**The Architect hace esto para software.**
+- ✅ **Leer parámetros en vivo** (RPM, temperatura, presión, posición del acelerador, MAF, etc.)
+- ✅ **Leer y borrar códigos de falla (DTCs)** desde la computadora del vehículo
+- ✅ **Conectarse vía Bluetooth Clásico** (iCar Pro 3.0) o **Bluetooth Low Energy** (iCar Pro 4.0)
+- ✅ **Dashboard en vivo** con gauges interactivos
+- ✅ **Soporte WebSocket** para conexión remota
+- ✅ **Interfaz reactiva** con Android Compose
 
-Abres este proyecto en [Claude Code](https://claude.com/claude-code), le dices que quieres construir (un sitio web, una app, un SaaS, una API — lo que sea), y The Architect:
-
-1. **Te hace preguntas inteligentes** sobre tu idea
-2. **Diseña todo el sistema** — base de datos, API, frontend, autenticacion, pagos, todo
-3. **Genera un archivo blueprint** (`.md`) tan detallado que otra instancia de Claude Code puede construir todo — paso a paso, sin preguntarte nada
-
-Piensalo asi:
-
-```
-Tu: "Quiero construir una app de gestion de proyectos como Trello"
-         ↓
-The Architect: hace preguntas, diseña todo
-         ↓
-Blueprint.md: plan completo con tech stack, esquema de base de datos,
-              rutas API, jerarquia de componentes, orden de construccion...
-         ↓
-Claude Code: lee el blueprint → construye toda la app
-```
-
-**Tu describes la idea. The Architect crea el plano. Claude Code lo construye.**
+Diseñada para **talleres y dueños de vehículos** que necesitan diagnosticar y monitorear el estado de sus autos sin herramientas profesionales costosas.
 
 ---
 
-## Como Funciona
+## Requisitos de Hardware
 
-The Architect sigue un flujo de 4 fases:
+### Adaptadores OBD-II Soportados
 
-### Fase 1: Descubrimiento
-> "Que estas construyendo? Para quien es? Que tan grande debe ser?"
+| Adaptador | Transporte | Estado | Notas |
+|-----------|-----------|--------|-------|
+| **iCar Pro 3.0** (Vgate) | Bluetooth Clásico (RFCOMM/SPP) | ✅ Soportado | Conexión estándar ELM327 |
+| **iCar Pro 4.0 BLE** (Vgate) | Bluetooth Low Energy (GATT) | ✅ Soportado | Protocolo GATT FFE0/FFE1 |
+| **Genéricos ELM327** | Bluetooth Clásico | ✅ Soportado | Con fallback a canal RFCOMM 1 |
+| **WebSocket (remoto)** | TCP/WebSocket | ✅ Soportado | Para testing y conexión remota |
 
-The Architect hace 2-3 preguntas para entender tu idea. Con tus respuestas, clasifica tu proyecto en uno de **6 arquetipos** (tipos de proyecto).
+### Requerimientos del Dispositivo
 
-### Fase 2: Profundizacion
-> "Necesitas cuentas de usuario? Pagos? Funciones en tiempo real?"
-
-Ahora hace preguntas especificas para TU tipo de proyecto. Tambien investiga mejores practicas usando skills como `/deep-research`.
-
-### Fase 3: Arquitectura
-> "Esto es lo que yo construiria: Next.js + Supabase + Clerk + Stripe en Vercel..."
-
-The Architect presenta el tech stack completo y la arquitectura con razones para cada decision. Tu confirmas o ajustas. Para proyectos con frontend, diseña un sistema visual completo (colores, fuentes, espaciado) usando `/ui-ux-pro-max`.
-
-### Fase 4: Generar
-The Architect produce el blueprint final — un solo archivo `.md` con **16 secciones** cubriendo todo lo que Claude Code necesita para construir tu proyecto de cero a desplegado.
+- **Android 8.0+** (API 26+)
+- **Bluetooth 4.0+** (para Bluetooth Clásico)
+- **Bluetooth 5.0+** (recomendado para BLE)
+- **Permisos de Bluetooth** (solicitados en tiempo de ejecución)
 
 ---
 
-## El Blueprint: 16 Secciones
+## Características
 
-Cada blueprint que The Architect genera incluye:
+### Monitoreo en Vivo
+- PIDs en tiempo real: RPM, velocidad, temperatura de agua, aire entrante, presión de gasolina, posición acelerador, MAF, etc.
+- Actualización cada 500ms
+- Gauges visuales con rango de valores
 
-| # | Seccion | Que Contiene |
-|---|---------|-------------|
-| 1 | Vision del Proyecto | Vision, objetivos, metricas de exito |
-| 2 | Tech Stack | Cada tecnologia con su razon |
-| 3 | Estructura de Directorios | Arbol completo de archivos con explicaciones |
-| 4 | Modelo de Datos | Entidades, campos, relaciones, esquema SQL |
-| 5 | Diseño de API | Rutas, endpoints, formas de request/response |
-| 6 | Arquitectura Frontend | Paginas, componentes, manejo de estado |
-| 7 | Sistema de Diseño | Colores, fuentes, espaciado, estilo de componentes |
-| 8 | Auth y Autorizacion | Flujo de login, roles, permisos |
-| 9 | **Orden de Construccion** | Paso a paso: que construir primero, segundo, tercero... |
-| 10 | Setup del Entorno | Prerequisitos, variables de entorno, comandos iniciales |
-| 11 | Dependencias | Cada paquete con su proposito |
-| 12 | Despliegue | Hosting, CI/CD, dominios |
-| 13 | Testing | Que testear, que herramientas, cuando |
-| 14 | Skills a Usar | Que skills de Claude Code ayudan durante la construccion |
-| 15 | **CLAUDE.md** | Instrucciones completas para el constructor — listo para pegar |
-| 16 | Reglas | Restricciones no negociables para la construccion |
+### Diagnóstico
+- **Lectura de DTCs (Códigos de Falla):**
+  - Prefijos: P (Powertrain), C (Chassis), B (Body), U (Network)
+  - Descripción completa de cada código
+  - Historial de faltas
+- **Borrado de DTCs** con confirmación
+- **Lectura de PIDs soportados** por el vehículo
 
-**La Seccion 9 (Orden de Construccion) es la mas importante.** Le dice a Claude Code exactamente que construir y en que orden — para que pueda trabajar autonomamente sin hacerte preguntas.
+### Transportes
+- **Bluetooth Clásico (RFCOMM):** Compatible con iCar Pro 3.0 y clones
+- **Bluetooth Low Energy (GATT):** Compatible con iCar Pro 4.0 BLE
+- **Fallback automático:** Si la conexión estándar falla, intenta canal RFCOMM 1
+- **WebSocket:** Modo remoto para testing y conexión a servidor
 
----
-
-## Tipos de Proyecto Soportados
-
-The Architect sabe diseñar **6 tipos de proyectos**, cada uno con su stack por defecto, estructura de directorios y orden de construccion:
-
-| Tipo | Ejemplos | Stack por Defecto |
-|------|----------|------------------|
-| **SaaS / Web App** | Trello, Notion, Slack | Next.js + Supabase + Clerk + Stripe + Vercel |
-| **Sitio de Marketing** | Landing pages, portafolios | Astro + Tailwind + Sanity + Vercel |
-| **App Movil** | Apps iOS/Android | Expo (React Native) + Supabase + NativeWind |
-| **API / Backend** | REST APIs, microservicios | Hono + Drizzle + PostgreSQL + Railway |
-| **Herramienta Interna** | Paneles admin, dashboards | Next.js + shadcn/ui + Prisma + Recharts |
-| **Plataforma de Contenido** | Blogs, docs, CMS | Next.js + Sanity + Algolia + Vercel |
-
-No ves tu tipo de proyecto? The Architect se adapta — estos son puntos de partida, no limites.
+### UI Inteligente
+- Descubrimiento automático de dispositivos Bluetooth pareados
+- Escaneo BLE con lista de dispositivos disponibles
+- Entrada manual de dirección MAC como fallback
+- Indicador de estado de conexión
+- Manejo de permisos en tiempo de ejecución
 
 ---
 
-## Inicio Rapido
+## Instalación
 
-### Prerequisitos
+### Requisitos Previos
 
-- [Claude Code](https://claude.com/claude-code) instalado
-- Una suscripcion a la API de Claude
+- Android Studio 2023.1+
+- JDK 17+
+- Gradle 8.0+
+- SDK Android 35 (compileSdk)
+- Mínimo SDK 26 (Android 8.0)
 
-### Instalacion
+### Clonación y Setup
 
 ```bash
-# Clona este repo
-git clone https://github.com/Hainrixz/the-architect.git
+# Clona el repositorio
+git clone https://github.com/jarmzcomz/OBD2.git
+cd OBD2/auto-diag-suite
 
-# Abre el proyecto en Claude Code
-cd the-architect
-claude
+# Abre en Android Studio
+# File > Open > selecciona la carpeta android/
+
+# O construye desde línea de comandos
+cd android
+./gradlew build
 ```
 
-Eso es todo. Claude Code lee el archivo `CLAUDE.md` y se convierte en The Architect.
-
-### Uso
-
-**Paso 1:** Dile a The Architect que quieres construir:
-
-```
-Tu: Quiero construir un SaaS para manejar reservaciones de restaurante
-    con cuentas de equipo, pagos con Stripe, y una pagina de reservas para clientes.
-```
-
-**Paso 2:** Responde las preguntas (2-3 a la vez, conversacional).
-
-**Paso 3:** Revisa la arquitectura propuesta. Confirma o ajusta.
-
-**Paso 4:** The Architect genera tu blueprint en `output/<nombre-proyecto>-blueprint.md`.
-
-**Paso 5:** Usa el blueprint para construir tu proyecto:
+### Instalación en Dispositivo
 
 ```bash
-# Crea tu nuevo proyecto
-mkdir ~/mi-saas-restaurante
-cp output/restaurant-saas-blueprint.md ~/mi-saas-restaurante/CLAUDE.md
-
-# Abrelo en Claude Code — construye todo desde el blueprint
-cd ~/mi-saas-restaurante
-claude
+# Descarga el APK más reciente desde Releases
+# O construye y despliega:
+cd android
+./gradlew installDebug
 ```
 
-### Modo Rapido
-
-No quieres responder muchas preguntas? Di:
-
-```
-Tu: Hazme un SaaS para reservaciones de restaurante. Solo construyelo.
-```
-
-The Architect hace solo 3 preguntas esenciales y usa valores por defecto inteligentes para todo lo demas.
+**Descargar APK:**
+La versión más reciente está disponible en [GitHub Releases](https://github.com/jarmzcomz/OBD2/releases/download/android-latest/app-debug.apk)
 
 ---
 
-## Estructura del Proyecto
+## Uso Básico
+
+### Paso 1: Emparejar el Dongle
+1. En **Configuración > Bluetooth** del teléfono, empareja el dongle iCar Pro
+2. Asegúrate de que Bluetooth esté **activado**
+
+### Paso 2: Abre la App
+1. Abre Auto-Diag Suite
+2. Verás la pantalla de conexión con dos modos:
+
+**Opción A: Bluetooth Clásico (iCar Pro 3.0)**
+- Selecciona **"BT Clásico (iCar Pro 3.0)"**
+- Elige el dongle de la lista de dispositivos pareados
+- Toca **Conectar**
+
+**Opción B: Bluetooth LE (iCar Pro 4.0)**
+- Selecciona **"BT LE (iCar Pro 4.0)"**
+- Toca **Escanear** para buscar dispositivos BLE
+- Selecciona tu dongle de la lista
+- Toca **Conectar**
+
+**Opción C: WiFi (Testing)**
+- Selecciona **"WiFi"**
+- Ingresa dirección IP:puerto del servidor WebSocket
+- Toca **Conectar**
+
+### Paso 3: Dashboard
+Una vez conectado, verás:
+- **PIDs en Vivo:** RPM, temperatura, velocidad, etc.
+- **Botón DTCs:** Lee códigos de falla activos
+- **Indicador:** Verde = conectado, Rojo = desconectado
+
+### Paso 4: Leer Códigos de Falla
+1. Toca **LEER DTCs**
+2. La app mostrará lista de códigos con descripción
+3. Para borrar, toca **BORRAR DTCs** (requiere confirmación)
+
+---
+
+## Permisos Requeridos
+
+| Permiso | Propósito | Min API |
+|---------|-----------|---------|
+| `BLUETOOTH` | Conexión a dispositivos | 8.0+ |
+| `BLUETOOTH_CONNECT` | Conectar a pareados | 12.0+ (runtime) |
+| `BLUETOOTH_SCAN` | Escaneo BLE | 12.0+ (runtime) |
+| `BLUETOOTH_ADMIN` | Control de Bluetooth | 8.0+ |
+
+La app solicita permisos en tiempo de ejecución en Android 12+.
+
+---
+
+## Estructura del Código (Android)
 
 ```
-the-architect/
-├── CLAUDE.md                          # El cerebro — hace que Claude se convierta en The Architect
-├── knowledge/
-│   ├── archetypes/                    # 6 plantillas por tipo de proyecto
-│   │   ├── saas-webapp.md             #   Apps SaaS
-│   │   ├── marketing-site.md          #   Landing pages
-│   │   ├── mobile-app.md              #   Apps moviles
-│   │   ├── api-backend.md             #   APIs y backends
-│   │   ├── internal-tool.md           #   Paneles admin
-│   │   └── content-platform.md        #   Blogs y CMS
-│   ├── building-blocks/               # 8 guias de decisiones transversales
-│   │   ├── auth-patterns.md           #   Opciones de autenticacion
-│   │   ├── database-patterns.md       #   Bases de datos y ORMs
-│   │   ├── deployment-patterns.md     #   Hosting y CI/CD
-│   │   ├── api-design-patterns.md     #   REST vs tRPC vs GraphQL
-│   │   ├── frontend-stacks.md         #   Comparacion de frameworks
-│   │   ├── testing-patterns.md        #   Estrategias de testing
-│   │   ├── styling-systems.md         #   CSS y design tokens
-│   │   └── state-management.md        #   Estado y patrones real-time
-│   ├── skills-registry.md             # Mapea skills de Claude Code a secciones del blueprint
-│   └── stack-compatibility.md         # Que funciona junto (y que no)
-├── templates/
-│   ├── blueprint-template.md          # El esqueleto de las 16 secciones
-│   └── claude-md-template.md          # Template para el CLAUDE.md del proyecto destino
-├── questions/
-│   ├── phase-1-discovery.md           # Preguntas universales de descubrimiento
-│   ├── phase-2-branches.md            # Profundizacion por arquetipo
-│   └── phase-3-confirmation.md        # Confirmacion de arquitectura
-└── output/                            # Los blueprints generados van aqui
+auto-diag-suite/android/app/src/main/java/com/autodiag/
+├── data/
+│   ├── BluetoothElm327Repository.kt    # Transporte Bluetooth Clásico
+│   ├── BleElm327Repository.kt          # Transporte Bluetooth LE
+│   ├── WebSocketRepository.kt          # Transporte WebSocket
+│   ├── PidDecoder.kt                   # Decodificación de PIDs
+│   └── ObdRepository.kt                # Interfaz común
+├── model/
+│   ├── DtcCode.kt                      # Modelo de código de falla
+│   ├── PidData.kt                      # Modelo de parámetro en vivo
+│   └── DtcDescriptions.kt              # Catálogo de descripciones
+├── viewmodel/
+│   ├── DashboardViewModel.kt           # Estado del dashboard
+│   └── DtcViewModel.kt                 # Estado de DTCs
+└── ui/
+    ├── ConnectScreen.kt                # Pantalla de conexión
+    ├── DashboardScreen.kt              # Pantalla principal
+    ├── DtcScreen.kt                    # Pantalla de DTCs
+    └── components/
+        ├── GaugeChart.kt               # Widget de medidor
+        └── PidCard.kt                  # Tarjeta de parámetro
 ```
 
 ---
 
-## Integracion de Skills
+## Protocolos
 
-The Architect usa skills de Claude Code durante el proceso de diseño:
+### Bluetooth Clásico (RFCOMM/SPP)
+```
+ELM327 SPP UUID: 00001101-0000-1000-8000-00805F9B34FB
+Flujo:
+1. createRfcommSocketToServiceRecord(UUID)
+2. Si falla → createRfcommSocket(1) por reflexión
+3. Enviar: "ATZ\r" (reset)
+4. Enviar: "ATE0\r", "ATL0\r", "ATSP0\r" (configuración)
+5. Enviar comandos OBD-II: "0101\r" (leer PIDs)
+```
 
-| Skill | Se Usa Para |
-|-------|-------------|
-| `/deep-research` | Investigar tecnologias y mejores practicas |
-| `/ui-ux-pro-max` | Diseñar sistemas visuales (colores, fuentes, espaciado) |
-| `/find-skills` | Descubrir skills para recomendar en la fase de construccion |
-| `/playwright-cli` | Analizar sitios de referencia |
+### Bluetooth LE (GATT)
+```
+Servicio: 0000FFE0-0000-1000-8000-00805F9B34FB
+Característica: 0000FFE1-0000-1000-8000-00805F9B34FB
+CCCD: 00002902-0000-1000-8000-00805F9B34FB
 
-Y recomienda skills para la **fase de construccion** en el blueprint:
-
-| Skill | Recomendado Para |
-|-------|-----------------|
-| `/frontend-design` | Construir UIs de grado produccion |
-| `/shadcn-ui` | Configurar librerias de componentes |
-| `/seo-audit` | Auditoria SEO despues de construir |
-| `/humanizer` | Hacer que el contenido suene natural |
+Flujo:
+1. connectGatt()
+2. discoverServices()
+3. setCharacteristicNotification(FFE1, true)
+4. writeDescriptor(CCCD, ENABLE_NOTIFICATION_VALUE)
+5. writeCharacteristic(FFE1, "ATZ\r")
+6. Acumular notificaciones hasta encontrar '>'
+```
 
 ---
 
-## Contribuir
+## Troubleshooting
 
-Las contribuciones son bienvenidas! Puedes ayudar con:
+### "No aparecen dispositivos pareados"
+- ✅ Verifica que Bluetooth esté **ON**
+- ✅ Asegúrate de haber emparejado el dongle en Configuración
+- ✅ Android 12+: Verifica que la app tenga permiso **BLUETOOTH_CONNECT**
+- ✅ Toca **Actualizar** en la pantalla de conexión
 
-- **Agregar nuevos arquetipos** — nuevos tipos de proyecto en `knowledge/archetypes/`
-- **Mejorar building blocks** — mejores matrices de decision, opciones de tech mas nuevas
-- **Mejorar el template del blueprint** — mas secciones, mejor estructura
-- **Traducir** — ayuda a hacer The Architect accesible en mas idiomas
+### "Conexión exitosa pero sin datos"
+- ✅ El dongle iCar Pro 3.0 usa **Bluetooth Clásico** (modo "BT Clásico")
+- ✅ El dongle iCar Pro 4.0 BLE requiere modo **"BT LE"** (diferente protocolo)
+- ✅ Verifica que el motor esté **encendido** (necesario para OBD-II)
+
+### "Error: 'read failed, socket might closed'"
+- ✅ Cancela descubrimiento de Bluetooth antes de conectar
+- ✅ Intenta desemparejar y emparejar nuevamente
+- ✅ Reinicia Bluetooth en el teléfono
+
+### "BLE: FFE0/FFE1 service not found"
+- ✅ El dispositivo no es BLE, intenta modo **"BT Clásico"**
+- ✅ Asegúrate de tener permiso **BLUETOOTH_SCAN** en Android 12+
+
+---
+
+## Contribuciones
+
+Las contribuciones son bienvenidas. Por favor:
+
+1. Fork el repositorio
+2. Crea una rama: `git checkout -b feature/mi-feature`
+3. Commit: `git commit -am 'Agrego mi feature'`
+4. Push: `git push origin feature/mi-feature`
+5. Abre Pull Request
+
+### Áreas de Mejora
+- [ ] Soporte UDS (ISO 14229) para lectura/escritura avanzada
+- [ ] Sniffer CAN (si el hardware lo permite)
+- [ ] Exportación de logs a CSV/PDF
+- [ ] Historial de sesiones
+- [ ] Tema oscuro
 
 ---
 
@@ -493,4 +286,328 @@ Licencia MIT. Ver [LICENSE](LICENSE) para detalles.
 
 ---
 
-## Construido por [tododeia.com](https://tododeia.com)
+## Seguridad
+
+⚠️ **Uso Legítimo Solamente**
+
+Esta herramienta está diseñada para:
+- ✅ Diagnóstico de vehículos propios
+- ✅ Lectura de parámetros en vivo
+- ✅ Lectura de códigos de falla
+- ✅ Mantenimiento preventivo
+
+**NO** se debe usar para:
+- ❌ Manipulación de odómetro
+- ❌ Desactivación del airbag
+- ❌ Bypass de sistemas de seguridad
+- ❌ Modificación no autorizada de vehículos ajenos
+
+El usuario es responsable del cumplimiento legal del uso de esta herramienta en su jurisdicción.
+
+---
+
+## Créditos
+
+- **Vgate iCar Pro**: Hardware OBD-II Bluetooth
+- **ELM327**: Protocolo de comunicación
+- **Android Jetpack Compose**: UI Framework
+- **Kotlin Coroutines**: Asincronía
+
+---
+
+---
+
+# English
+
+## What is Auto-Diag Suite?
+
+Auto-Diag Suite is a **complete automotive diagnostic suite** that allows you to:
+
+- ✅ **Read live parameters** (RPM, temperature, pressure, throttle position, MAF, etc.)
+- ✅ **Read and clear fault codes (DTCs)** from the vehicle's computer
+- ✅ **Connect via Bluetooth Classic** (iCar Pro 3.0) or **Bluetooth Low Energy** (iCar Pro 4.0)
+- ✅ **Live dashboard** with interactive gauges
+- ✅ **WebSocket support** for remote connection
+- ✅ **Reactive UI** with Android Compose
+
+Designed for **repair shops and vehicle owners** who need to diagnose and monitor their cars without expensive professional tools.
+
+---
+
+## Hardware Requirements
+
+### Supported OBD-II Adapters
+
+| Adapter | Transport | Status | Notes |
+|---------|-----------|--------|-------|
+| **iCar Pro 3.0** (Vgate) | Bluetooth Classic (RFCOMM/SPP) | ✅ Supported | Standard ELM327 connection |
+| **iCar Pro 4.0 BLE** (Vgate) | Bluetooth Low Energy (GATT) | ✅ Supported | GATT FFE0/FFE1 protocol |
+| **Generic ELM327** | Bluetooth Classic | ✅ Supported | With fallback to RFCOMM channel 1 |
+| **WebSocket (remote)** | TCP/WebSocket | ✅ Supported | For testing and remote connection |
+
+### Device Requirements
+
+- **Android 8.0+** (API 26+)
+- **Bluetooth 4.0+** (for Bluetooth Classic)
+- **Bluetooth 5.0+** (recommended for BLE)
+- **Bluetooth permissions** (requested at runtime)
+
+---
+
+## Features
+
+### Live Monitoring
+- Real-time PIDs: RPM, speed, coolant temperature, intake air, fuel pressure, throttle position, MAF, etc.
+- 500ms update interval
+- Visual gauges with value ranges
+
+### Diagnostics
+- **DTC Reading (Fault Codes):**
+  - Prefixes: P (Powertrain), C (Chassis), B (Body), U (Network)
+  - Full description for each code
+  - Fault history
+- **DTC Clearing** with confirmation
+- **Supported PIDs** reading from vehicle
+
+### Transports
+- **Bluetooth Classic (RFCOMM):** Compatible with iCar Pro 3.0 and clones
+- **Bluetooth Low Energy (GATT):** Compatible with iCar Pro 4.0 BLE
+- **Automatic fallback:** If standard connection fails, tries RFCOMM channel 1
+- **WebSocket:** Remote mode for testing and server connection
+
+### Smart UI
+- Automatic discovery of paired Bluetooth devices
+- BLE scanning with available devices list
+- Manual MAC address input as fallback
+- Connection status indicator
+- Runtime permission handling
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Android Studio 2023.1+
+- JDK 17+
+- Gradle 8.0+
+- Android SDK 35 (compileSdk)
+- Minimum SDK 26 (Android 8.0)
+
+### Clone and Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/jarmzcomz/OBD2.git
+cd OBD2/auto-diag-suite
+
+# Open in Android Studio
+# File > Open > select the android/ folder
+
+# Or build from command line
+cd android
+./gradlew build
+```
+
+### Install on Device
+
+```bash
+# Download the latest APK from Releases
+# Or build and deploy:
+cd android
+./gradlew installDebug
+```
+
+**Download APK:**
+The latest version is available at [GitHub Releases](https://github.com/jarmzcomz/OBD2/releases/download/android-latest/app-debug.apk)
+
+---
+
+## Basic Usage
+
+### Step 1: Pair the Dongle
+1. Go to **Settings > Bluetooth** on your phone
+2. Pair the iCar Pro dongle
+3. Make sure Bluetooth is **enabled**
+
+### Step 2: Open the App
+1. Launch Auto-Diag Suite
+2. You'll see the connection screen with two modes:
+
+**Option A: Bluetooth Classic (iCar Pro 3.0)**
+- Select **"BT Classic (iCar Pro 3.0)"**
+- Choose the dongle from your paired devices list
+- Tap **Connect**
+
+**Option B: Bluetooth LE (iCar Pro 4.0)**
+- Select **"BT LE (iCar Pro 4.0)"**
+- Tap **Scan** to search for BLE devices
+- Select your dongle from the list
+- Tap **Connect**
+
+**Option C: WiFi (Testing)**
+- Select **"WiFi"**
+- Enter WebSocket server IP:port
+- Tap **Connect**
+
+### Step 3: Dashboard
+Once connected, you'll see:
+- **Live PIDs:** RPM, temperature, speed, etc.
+- **DTC Button:** Read active fault codes
+- **Status:** Green = connected, Red = disconnected
+
+### Step 4: Read Fault Codes
+1. Tap **READ DTCs**
+2. The app will display codes with descriptions
+3. To clear, tap **CLEAR DTCs** (requires confirmation)
+
+---
+
+## Required Permissions
+
+| Permission | Purpose | Min API |
+|-----------|---------|---------|
+| `BLUETOOTH` | Device connection | 8.0+ |
+| `BLUETOOTH_CONNECT` | Connect to paired devices | 12.0+ (runtime) |
+| `BLUETOOTH_SCAN` | BLE scanning | 12.0+ (runtime) |
+| `BLUETOOTH_ADMIN` | Bluetooth control | 8.0+ |
+
+The app requests permissions at runtime on Android 12+.
+
+---
+
+## Code Structure (Android)
+
+```
+auto-diag-suite/android/app/src/main/java/com/autodiag/
+├── data/
+│   ├── BluetoothElm327Repository.kt    # Bluetooth Classic transport
+│   ├── BleElm327Repository.kt          # Bluetooth LE transport
+│   ├── WebSocketRepository.kt          # WebSocket transport
+│   ├── PidDecoder.kt                   # PID decoding
+│   └── ObdRepository.kt                # Common interface
+├── model/
+│   ├── DtcCode.kt                      # Fault code model
+│   ├── PidData.kt                      # Live parameter model
+│   └── DtcDescriptions.kt              # Descriptions catalog
+├── viewmodel/
+│   ├── DashboardViewModel.kt           # Dashboard state
+│   └── DtcViewModel.kt                 # DTC state
+└── ui/
+    ├── ConnectScreen.kt                # Connection screen
+    ├── DashboardScreen.kt              # Main screen
+    ├── DtcScreen.kt                    # DTC screen
+    └── components/
+        ├── GaugeChart.kt               # Gauge widget
+        └── PidCard.kt                  # Parameter card
+```
+
+---
+
+## Protocols
+
+### Bluetooth Classic (RFCOMM/SPP)
+```
+ELM327 SPP UUID: 00001101-0000-1000-8000-00805F9B34FB
+Flow:
+1. createRfcommSocketToServiceRecord(UUID)
+2. If fails → createRfcommSocket(1) via reflection
+3. Send: "ATZ\r" (reset)
+4. Send: "ATE0\r", "ATL0\r", "ATSP0\r" (config)
+5. Send OBD-II commands: "0101\r" (read PIDs)
+```
+
+### Bluetooth LE (GATT)
+```
+Service: 0000FFE0-0000-1000-8000-00805F9B34FB
+Characteristic: 0000FFE1-0000-1000-8000-00805F9B34FB
+CCCD: 00002902-0000-1000-8000-00805F9B34FB
+
+Flow:
+1. connectGatt()
+2. discoverServices()
+3. setCharacteristicNotification(FFE1, true)
+4. writeDescriptor(CCCD, ENABLE_NOTIFICATION_VALUE)
+5. writeCharacteristic(FFE1, "ATZ\r")
+6. Accumulate notifications until '>' is found
+```
+
+---
+
+## Troubleshooting
+
+### "No paired devices appear"
+- ✅ Verify Bluetooth is **ON**
+- ✅ Make sure you've paired the dongle in Settings
+- ✅ Android 12+: Check that the app has **BLUETOOTH_CONNECT** permission
+- ✅ Tap **Refresh** on the connection screen
+
+### "Connected but no data"
+- ✅ iCar Pro 3.0 uses **Bluetooth Classic** (mode "BT Classic")
+- ✅ iCar Pro 4.0 BLE requires **"BT LE"** mode (different protocol)
+- ✅ Make sure the engine is **ON** (required for OBD-II)
+
+### "Error: 'read failed, socket might closed'"
+- ✅ Cancel Bluetooth discovery before connecting
+- ✅ Try unpairing and pairing again
+- ✅ Restart Bluetooth on your phone
+
+### "BLE: FFE0/FFE1 service not found"
+- ✅ Device is not BLE, try **"BT Classic"** mode
+- ✅ Make sure you have **BLUETOOTH_SCAN** permission on Android 12+
+
+---
+
+## Contributing
+
+Contributions are welcome. Please:
+
+1. Fork the repository
+2. Create a branch: `git checkout -b feature/my-feature`
+3. Commit: `git commit -am 'Add my feature'`
+4. Push: `git push origin feature/my-feature`
+5. Open a Pull Request
+
+### Areas for Improvement
+- [ ] UDS (ISO 14229) support for advanced read/write
+- [ ] CAN sniffer (if hardware permits)
+- [ ] Export logs to CSV/PDF
+- [ ] Session history
+- [ ] Dark mode
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## Security
+
+⚠️ **Legitimate Use Only**
+
+This tool is designed for:
+- ✅ Diagnosing your own vehicles
+- ✅ Reading live parameters
+- ✅ Reading fault codes
+- ✅ Preventive maintenance
+
+**MUST NOT** be used for:
+- ❌ Odometer manipulation
+- ❌ Airbag disabling
+- ❌ Security system bypass
+- ❌ Unauthorized vehicle modification
+
+The user is responsible for legal compliance with the use of this tool in their jurisdiction.
+
+---
+
+## Credits
+
+- **Vgate iCar Pro:** Bluetooth OBD-II Hardware
+- **ELM327:** Communication protocol
+- **Android Jetpack Compose:** UI Framework
+- **Kotlin Coroutines:** Async runtime
+
+---
