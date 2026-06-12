@@ -66,6 +66,84 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSecurityCode(code: String) { _securityCode.value = code.trim() }
 
+    // Dos "fotos" de las adaptaciones del módulo 09, tomadas con luz y con sombra,
+    // para encontrar el DID del sensor de luz por diferencia.
+    private var snapLight: Map<String, String>? = null
+    private var snapDark: Map<String, String>? = null
+
+    /**
+     * Escanea las adaptaciones del módulo 09 y guarda una "foto". Cuando existan
+     * las dos (luz y sombra), calcula la DIFERENCIA: los DIDs cuyo valor cambió son
+     * los candidatos al sensor de luz. Todo es SOLO LECTURA.
+     */
+    fun captureLightSnapshot(isLight: Boolean) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress("09") ?: return
+        _busy.value = true
+        _status.value = "Capturando adaptaciones del módulo 09 (${if (isLight) "con LUZ" else "con SOMBRA"})… espera."
+        viewModelScope.launch {
+            selectModule(r, mod)
+            runCatching { r.sendRaw("10 03") }
+            val snap = linkedMapOf<String, String>()
+            // Rango de adaptaciones frecuentes en MQB (solo lectura). Acotado para
+            // que no tarde demasiado por Bluetooth.
+            val ranges = listOf(0x0200..0x02FF, 0x0400..0x04FF, 0x0500..0x05FF)
+            var done = 0
+            val total = ranges.sumOf { it.count() }
+            for (range in ranges) {
+                for (did in range) {
+                    val didHex = "%04X".format(did)
+                    val resp = runCatching { r.sendRaw("22 $didHex") }.getOrElse { "" }
+                    val value = positiveValue(resp, didHex)
+                    if (value != null) snap[didHex] = value
+                    done++
+                    if (done % 32 == 0) _status.value = "Escaneando 09… $done/$total (${snap.size} adaptaciones)"
+                }
+            }
+            if (isLight) snapLight = snap else snapDark = snap
+            _diag.value = buildLightDiff(snap, isLight)
+            _status.value = if (snapLight != null && snapDark != null)
+                "Listo: comparé luz vs sombra. Mira los DIDs que cambiaron abajo (ese es el sensor)."
+            else "Foto '${if (isLight) "LUZ" else "SOMBRA"}' guardada (${snap.size} adaptaciones). Ahora toma la otra."
+            _busy.value = false
+        }
+    }
+
+    /** Construye el texto del panel: foto actual + diferencia si hay ambas. */
+    private fun buildLightDiff(current: Map<String, String>, isLight: Boolean): String {
+        val sb = StringBuilder("ADAPTACIONES 09 · foto '${if (isLight) "LUZ" else "SOMBRA"}' (${current.size} DIDs)\n")
+        val a = snapLight; val b = snapDark
+        if (a != null && b != null) {
+            sb.append("\n=== DIFERENCIAS LUZ vs SOMBRA (candidatos al sensor) ===\n")
+            val keys = (a.keys + b.keys).toSortedSet()
+            var changes = 0
+            for (k in keys) {
+                val va = a[k]; val vb = b[k]
+                if (va != vb) { sb.append("DID $k:  LUZ=$va   SOMBRA=$vb\n"); changes++ }
+            }
+            if (changes == 0) sb.append("(Ningún DID cambió. Prueba con más contraste de luz, o el sensor está en otro rango.)\n")
+            else sb.append("\nComparte esto: el DID que cambia con la luz es el del sensor.\n")
+        } else {
+            for ((k, v) in current) sb.append("DID $k = $v\n")
+        }
+        return sb.toString()
+    }
+
+    /** Limpia las fotos del sensor de luz para empezar de cero. */
+    fun resetLightSnapshots() { snapLight = null; snapDark = null; _status.value = "Fotos del sensor borradas." }
+
+    /** Devuelve el valor (hex) de una respuesta positiva '62 <did> <bytes>', o null. */
+    private fun positiveValue(raw: String, did: String): String? {
+        val hex = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
+        val marker = "62$did"
+        val pos = hex.indexOf(marker)
+        if (pos < 0) return null
+        val data = hex.substring(pos + marker.length)
+        if (data.length < 2) return null
+        return data.chunked(2).joinToString(" ")
+    }
+
     val available: Boolean
         get() = getApplication<AutoDiagApplication>().activeRepository?.capabilities?.rawTerminal == true
 

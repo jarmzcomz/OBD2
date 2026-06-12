@@ -466,6 +466,38 @@ private fun VagTab(vm: VagViewModel) {
                     color = Color(0xFF7C8AA5), fontSize = 10.sp)
             }
         }
+        // Buscador del sensor de luz por diferencia (luz vs sombra).
+        item {
+            Column(modifier = Modifier.fillMaxWidth()
+                .background(Color(0xFF12202E), RoundedCornerShape(12.dp))
+                .border(1.dp, Color(0xFF24405A), RoundedCornerShape(12.dp))
+                .padding(12.dp)) {
+                Text("🌗 Buscar el sensor de luz (para tu polarizado)", color = Color(0xFF7FD0E0),
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("1) A plena luz toca 'Capturar LUZ'.  2) Tapa el sensor (o en sombra) y toca " +
+                    "'Capturar SOMBRA'.  La app marca el dato que cambió: ese es el sensor.",
+                    color = Color(0xFF9FB3C8), fontSize = 10.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier.weight(1f).background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy) { vm.captureLightSnapshot(true) }.padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) { Text("☀ Capturar LUZ", color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    Box(
+                        modifier = Modifier.weight(1f).background(Color(0xFF24344A), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy) { vm.captureLightSnapshot(false) }.padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) { Text("🌑 Capturar SOMBRA", color = Color(0xFF9FB3C8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier.background(Color(0xFF1A2438), RoundedCornerShape(8.dp))
+                        .clickable(enabled = !busy) { vm.resetLightSnapshots() }.padding(horizontal = 12.dp, vertical = 6.dp)
+                ) { Text("Borrar capturas", color = Color(0xFF7C8AA5), fontSize = 10.sp) }
+            }
+        }
         // Campo opcional para pegar el código/llave de seguridad.
         item {
             OutlinedTextField(
