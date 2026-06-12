@@ -103,12 +103,68 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             if (isLight) snapLight = snap else snapDark = snap
+            // Cuando ya hay ambas fotos, DETECTA automáticamente el DID del sensor.
+            val detected = if (snapLight != null && snapDark != null) detectSensorDid() else null
             _diag.value = buildLightDiff(snap, isLight)
-            _status.value = if (snapLight != null && snapDark != null)
-                "Listo: comparé luz vs sombra. Mira los DIDs que cambiaron abajo (ese es el sensor)."
-            else "Foto '${if (isLight) "LUZ" else "SOMBRA"}' guardada (${snap.size} adaptaciones). Ahora toma la otra."
+            _status.value = when {
+                detected != null -> {
+                    "✓ ¡Sensor de luz DETECTADO automáticamente! DID $detected. " +
+                        "Ya puedes mover el slider para ajustarlo (apunta a ese byte)."
+                }
+                snapLight != null && snapDark != null ->
+                    "Comparé luz vs sombra pero no hallé un candidato claro. Repite con MÁS contraste " +
+                        "(sol directo vs sensor tapado con la mano)."
+                else ->
+                    "Foto '${if (isLight) "LUZ" else "SOMBRA"}' guardada (${snap.size} adaptaciones). Ahora toma la otra."
+            }
             _busy.value = false
         }
+    }
+
+    /**
+     * DID del sensor de luz DETECTADO automáticamente (o null si aún no se detecta).
+     * Si está presente, la lectura/escritura del umbral apunta a ESTE DID en vez del
+     * 02E0 por defecto, así funciona aunque el sensor esté en otra dirección.
+     */
+    private val _detectedSensorDid = MutableStateFlow<String?>(null)
+    val detectedSensorDid: StateFlow<String?> = _detectedSensorDid.asStateFlow()
+
+    /** DID a usar para el sensor: el detectado, o el 02E0 conocido por defecto. */
+    private fun sensorDid(): String = _detectedSensorDid.value ?: "02E0"
+
+    /** Convierte un valor hex "31 5B 34 D3" a entero big-endian (o null). */
+    private fun hexToBigEndianInt(value: String?): Int? {
+        if (value == null) return null
+        val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
+        if (bytes.size != 4) return null
+        return bytes.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
+    }
+
+    /**
+     * Compara las dos fotos (luz/sombra) y elige el DID del sensor de luz: el de 4
+     * bytes cuyo valor BAJA más de luz a sombra (la luminosidad es alta con luz y
+     * baja en penumbra). Guarda el DID detectado y precarga el slider con el valor
+     * de LUZ. Devuelve el DID o null si no hay candidato claro.
+     */
+    private fun detectSensorDid(): String? {
+        val light = snapLight ?: return null
+        val dark = snapDark ?: return null
+        var bestDid: String? = null
+        var bestDrop = 0L
+        var bestLightVal = -1
+        for (did in (light.keys + dark.keys)) {
+            val lv = hexToBigEndianInt(light[did]) ?: continue
+            val dv = hexToBigEndianInt(dark[did]) ?: continue
+            if (lv == dv) continue
+            // La luminosidad cae al oscurecer: buscamos la mayor caída luz→sombra.
+            val drop = lv.toLong() - dv.toLong()
+            if (drop > bestDrop) { bestDrop = drop; bestDid = did; bestLightVal = lv }
+        }
+        if (bestDid != null) {
+            _detectedSensorDid.value = bestDid
+            _lightSensorValue.value = bestLightVal
+        }
+        return bestDid
     }
 
     /** Construye el texto del panel: foto actual + diferencia si hay ambas. */
@@ -124,7 +180,12 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                 if (va != vb) { sb.append("DID $k:  LUZ=$va   SOMBRA=$vb\n"); changes++ }
             }
             if (changes == 0) sb.append("(Ningún DID cambió. Prueba con más contraste de luz, o el sensor está en otro rango.)\n")
-            else sb.append("\nComparte esto: el DID que cambia con la luz es el del sensor.\n")
+            else {
+                val det = _detectedSensorDid.value
+                if (det != null) sb.append("\n>>> SENSOR DETECTADO AUTOMÁTICAMENTE: DID $det <<<\n" +
+                    "El slider ya apunta a este byte. Ajusta y aplica.\n")
+                else sb.append("\nEl DID que cambia con la luz es el del sensor.\n")
+            }
         } else {
             for ((k, v) in current) sb.append("DID $k = $v\n")
         }
@@ -132,7 +193,10 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Limpia las fotos del sensor de luz para empezar de cero. */
-    fun resetLightSnapshots() { snapLight = null; snapDark = null; _status.value = "Fotos del sensor borradas." }
+    fun resetLightSnapshots() {
+        snapLight = null; snapDark = null; _detectedSensorDid.value = null
+        _status.value = "Fotos del sensor borradas. Vuelve a capturar luz y sombra."
+    }
 
     // Valor actual del sensor de luz leído del módulo 09 (DID 02E0, 4 bytes big-endian).
     private val _lightSensorValue = MutableStateFlow(-1)
@@ -148,11 +212,12 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         _busy.value = true
         _status.value = "Leyendo sensor de luz…"
         val mod = VagCatalog.moduleByAddress("09") ?: return
+        val did = sensorDid()
         viewModelScope.launch {
             selectModule(r, mod)
             runCatching { r.sendRaw("10 03") }
-            val resp = runCatching { r.sendRaw("22 02E0") }.getOrElse { "" }
-            val value = positiveValue(resp, "02E0")
+            val resp = runCatching { r.sendRaw("22 $did") }.getOrElse { "" }
+            val value = positiveValue(resp, did)
             if (value != null) {
                 val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
                 // Los 4 bytes forman un entero big-endian que representa la luminosidad.
@@ -176,9 +241,10 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val r = repo() ?: return
         if (_busy.value) return
         val mod = VagCatalog.moduleByAddress("09") ?: return
+        val did = sensorDid()
         _busy.value = true
-        _status.value = "Aplicando nuevo umbral del sensor de luz…"
-        val log = StringBuilder("ESCRITURA SENSOR DE LUZ · módulo 09\nNuevo valor: 0x${"%08X".format(newValue)} ($newValue)\n")
+        _status.value = "Aplicando nuevo umbral del sensor de luz (DID $did)…"
+        val log = StringBuilder("ESCRITURA SENSOR DE LUZ · módulo 09 · DID $did\nNuevo valor: 0x${"%08X".format(newValue)} ($newValue)\n")
         viewModelScope.launch {
             suspend fun send(cmd: String): String {
                 val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
@@ -190,7 +256,7 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
             val sec = attemptSecurityAccessLogged(r, mod, ::send)
             // Empaqueta el valor como 4 bytes big-endian.
             val b = (0..3).map { i -> "%02X".format((newValue shr (24 - i * 8)) and 0xFF) }.joinToString(" ")
-            val writeResp = send("2E 02E0 $b")
+            val writeResp = send("2E $did $b")
             val result = UdsInterpreter.interpret(writeResp, "2E")
             _status.value = if (result.ok) {
                 _lightSensorValue.value = newValue

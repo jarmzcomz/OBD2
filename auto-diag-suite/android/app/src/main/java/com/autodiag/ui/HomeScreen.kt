@@ -380,6 +380,7 @@ private fun VagTab(vm: VagViewModel) {
     val securityCode by vm.securityCode.collectAsState()
     val diag by vm.diag.collectAsState()
     val lightSensorValue by vm.lightSensorValue.collectAsState()
+    val detectedSensorDid by vm.detectedSensorDid.collectAsState()
     val clipboard = LocalClipboardManager.current
     // Valor del slider (se inicializa del valor leído del auto).
     var sliderValue by rememberSaveable { mutableStateOf(0f) }
@@ -516,8 +517,17 @@ private fun VagTab(vm: VagViewModel) {
                     fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("1) A plena luz toca 'Capturar LUZ'.  2) Tapa el sensor (o en sombra) y toca " +
-                    "'Capturar SOMBRA'.  La app marca el dato que cambió: ese es el sensor.",
+                    "'Capturar SOMBRA'.  La app DETECTA sola el byte del sensor y conecta el slider.",
                     color = Color(0xFF9FB3C8), fontSize = 10.sp)
+                if (detectedSensorDid != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(modifier = Modifier.fillMaxWidth()
+                        .background(Color(0xFF14331F), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        Text("✓ Sensor detectado automáticamente: DID $detectedSensorDid — el slider ya apunta ahí.",
+                            color = Color(0xFF6EE7A0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Box(
