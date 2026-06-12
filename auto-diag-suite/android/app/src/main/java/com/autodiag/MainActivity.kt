@@ -14,8 +14,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.autodiag.ui.ConnectScreen
-import com.autodiag.ui.DashboardScreen
-import com.autodiag.ui.DtcScreen
+import com.autodiag.ui.HomeScreen
 import com.autodiag.ui.theme.AutoDiagTheme
 import com.autodiag.viewmodel.ConnectViewModel
 
@@ -54,18 +53,12 @@ fun AutoDiagApp() {
             )
         }
         composable("dashboard") {
-            DashboardScreen(
-                onNavigateToDtc = { navController.navigate("dtc") },
+            HomeScreen(
                 onDisconnect = {
                     navController.navigate("connect") {
                         popUpTo("connect") { inclusive = true }
                     }
                 }
-            )
-        }
-        composable("dtc") {
-            DtcScreen(
-                onBack = { navController.popBackStack() }
             )
         }
     }

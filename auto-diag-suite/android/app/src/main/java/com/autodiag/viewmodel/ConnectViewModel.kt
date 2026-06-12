@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.autodiag.AutoDiagApplication
 import com.autodiag.data.BleElm327Repository
 import com.autodiag.data.BluetoothElm327Repository
+import com.autodiag.data.DemoRepository
 import com.autodiag.data.ObdRepository
 import com.autodiag.data.WebSocketRepository
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +43,7 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
 
             runCatching { repo.connect() }
                 .onSuccess {
-                    app.setRepository(repo)
+                    app.setRepository(repo, labelFor(mode, address))
                     _state.value = ConnectState.Connected
                 }
                 .onFailure { e ->
@@ -55,9 +56,17 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
         _state.value = ConnectState.Idle
     }
 
+    private fun labelFor(mode: String, address: String): String = when (mode) {
+        "demo" -> "Modo Demo (datos simulados)"
+        "ble" -> "Bluetooth LE · $address"
+        "bluetooth" -> "Bluetooth Clásico · $address"
+        else -> "WiFi · $address"
+    }
+
     private fun createRepository(mode: String, address: String): ObdRepository? {
         val app = getApplication<Application>()
         return when (mode) {
+            "demo" -> DemoRepository()
             "bluetooth", "ble" -> {
                 val manager = app.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
                 val adapter = manager.adapter ?: return null

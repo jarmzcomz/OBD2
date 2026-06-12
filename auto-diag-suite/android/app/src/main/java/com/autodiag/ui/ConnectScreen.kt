@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -206,7 +207,27 @@ fun ConnectScreen(
                 "OBD-II Diagnostic Suite",
                 color = Color(0xFF7C8AA5),
                 fontSize = 14.sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
+                modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
+            )
+
+            // Botón Demo: entra al dashboard con datos simulados, sin hardware.
+            Button(
+                onClick = { connectViewModel.connect("demo", "") },
+                enabled = !isConnecting,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Probar en modo Demo", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+            }
+            Text(
+                "Datos simulados de un vehículo en marcha — sin necesidad de dongle.",
+                color = Color(0xFF7C8AA5),
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp, bottom = 20.dp)
             )
 
             // Banner de error
