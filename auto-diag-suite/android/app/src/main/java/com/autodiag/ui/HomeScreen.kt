@@ -630,6 +630,31 @@ private fun VagTab(vm: VagViewModel) {
                 )
             )
         }
+        // Botones para PROBAR el acceso de seguridad (calcula la clave) sin escribir.
+        item {
+            Column(modifier = Modifier.fillMaxWidth()
+                .background(Color(0xFF0F1E2D), RoundedCornerShape(12.dp))
+                .border(1.dp, Color(0xFF1E4060), RoundedCornerShape(12.dp))
+                .padding(12.dp)) {
+                Text("🔐 Probar cálculo de clave (sin escribir)", color = Color(0xFF93B4E8),
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Pide la semilla al módulo, calcula la clave con el login estático y la envía. " +
+                    "Verás la semilla y la clave en el diagnóstico de abajo.",
+                    color = Color(0xFF9FB3C8), fontSize = 10.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    for (addr in listOf("09", "17", "19")) {
+                        Box(
+                            modifier = Modifier.weight(1f).background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                                .clickable(enabled = !busy) { vm.testSecurityAccess(addr) }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) { Text("Módulo $addr", color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    }
+                }
+            }
+        }
         item {
             Text(
                 "La app ya trae los logins conocidos del MQB (módulo 09 → 31347, etc.) e intenta " +

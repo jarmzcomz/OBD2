@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.autodiag.AutoDiagApplication
+import com.autodiag.data.Mode09Decoder
 import com.autodiag.data.UdsInterpreter
 import com.autodiag.data.VagCatalog
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -267,13 +268,18 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                 // 09 (OBD estándar) el motor responde en 7E8 con direccionamiento funcional.
                 send("AT CRA")     // limpia el filtro de recepción
                 send("AT AR")      // recepción automática de direcciones
+                send("AT CAF1")    // formato CAN automático: re-ensambla ISO-TP multi-trama
                 send("AT SH 7DF")  // cabecera funcional OBD-II
                 val resp = send("09 02")
-                val ascii = UdsInterpreter.hexToAscii(resp)
-                _status.value = if (ascii != null && ascii.length >= 10) {
-                    "✓ VIN del vehículo: ${ascii.takeLast(17)}"
+                // El VIN llega multi-trama: usa el decodificador robusto que quita
+                // los contadores de trama ("0:", "1:") antes de pasar a ASCII.
+                val vin = Mode09Decoder.decodeVin(resp)
+                _status.value = if (vin != null && vin.length >= 17) {
+                    "✓ VIN del vehículo: $vin"
+                } else if (vin != null && vin.length >= 10) {
+                    "⚠ VIN parcial: $vin (revisa el diagnóstico de abajo)"
                 } else {
-                    "✗ No se pudo leer el VIN. Respuesta: ${UdsInterpreter.interpret(resp).plain}"
+                    "✗ No se pudo leer el VIN. Respuesta cruda abajo. ${UdsInterpreter.interpret(resp).plain}"
                 }
                 _diag.value = log.toString()
             } finally {
@@ -443,6 +449,72 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * PRUEBA visible de acceso de seguridad sobre un módulo, SIN escribir nada.
+     * Pide la semilla (27 01), calcula la clave con el login estático y la envía
+     * (27 02), mostrando en el panel de diagnóstico EXACTAMENTE la semilla recibida
+     * y la clave calculada. Sirve para verificar que el cálculo de clave funciona
+     * antes de tocar codificación. UN SOLO intento (no reintenta para no bloquear).
+     */
+    fun testSecurityAccess(addr: String) {
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress(addr) ?: return
+        _busy.value = true
+        _status.value = "Probando acceso de seguridad en módulo ${mod.address}…"
+        val log = StringBuilder("PRUEBA ACCESO DE SEGURIDAD · módulo ${mod.address} ${mod.name}\n" +
+            "tx ${mod.reqId} / rx ${mod.rspId}\n")
+        viewModelScope.launch {
+            try {
+                suspend fun send(cmd: String): String {
+                    val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                    log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                    return resp
+                }
+                selectModule(r, mod)
+                send("10 03")
+
+                val userCode = _securityCode.value.replace(Regex("[^0-9]"), "").toIntOrNull()
+                val login = userCode ?: mod.login
+                if (login == null) {
+                    _status.value = "Este módulo no tiene login conocido. Pega uno en el campo de código."
+                    _diag.value = log.toString(); _busy.value = false; return@launch
+                }
+
+                val seedResp = send("27 01")
+                val seedBytes = parseSeedBytes(seedResp)
+                if (seedBytes == null) {
+                    _status.value = "✗ No llegó la semilla (27 01). Revisa el diagnóstico abajo."
+                    _diag.value = log.toString(); _busy.value = false; return@launch
+                }
+                if (seedBytes.all { it == 0 }) {
+                    _status.value = "✓ El módulo ya estaba DESBLOQUEADO (semilla en ceros)."
+                    log.append("Semilla = 00... → módulo ya desbloqueado.\n")
+                    _diag.value = log.toString(); _busy.value = false; return@launch
+                }
+
+                val width = seedBytes.size.coerceIn(2, 4)
+                val key = (0 until width).joinToString(" ") { i ->
+                    "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
+                }
+                val seedHex = seedBytes.joinToString(" ") { "%02X".format(it and 0xFF) }
+                log.append("Login estático: $login (0x${"%X".format(login)})\n")
+                log.append("Semilla recibida: $seedHex (${seedBytes.size} bytes)\n")
+                log.append("Clave calculada:  $key\n")
+
+                val res = UdsInterpreter.interpret(send("27 02 $key"), "27")
+                _status.value = if (res.ok) {
+                    "✓ ¡Acceso CONCEDIDO! Login $login, clave $key. El módulo aceptó la llave."
+                } else {
+                    "✗ Llave rechazada: ${res.plain}. Semilla $seedHex, clave $key (ver diagnóstico)."
+                }
+                _diag.value = log.toString()
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /**
      * Selecciona un módulo en el ELM327. No basta con poner el header de envío
      * (AT SH): hay que decirle al adaptador qué ID CAN aceptar de respuesta
      * (AT CRA), si no filtra todo lo que no sea 7E8-7EF y los módulos como 09/17
@@ -478,16 +550,5 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val dataHex = hex.substring(pos + marker.length)
         if (dataHex.length < 2) return null
         return dataHex.chunked(2).mapNotNull { it.toIntOrNull(16) }
-    }
-
-    private fun oneShot(msg: String, block: suspend (com.autodiag.data.ObdRepository) -> String) {
-        val r = repo() ?: return
-        if (_busy.value) return
-        _busy.value = true
-        _status.value = msg
-        viewModelScope.launch {
-            _status.value = runCatching { block(r) }.getOrElse { "Error: ${it.message}" }
-            _busy.value = false
-        }
     }
 }
