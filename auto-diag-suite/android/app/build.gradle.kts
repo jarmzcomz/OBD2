@@ -12,8 +12,8 @@ android {
         applicationId = "com.autodiag"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0-pro"
+        versionCode = 3
+        versionName = "2.1-pro"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -21,9 +21,29 @@ android {
         }
     }
 
+    // Llave de firma ESTABLE (no el debug.keystore aleatorio que el CI regenera en
+    // cada build). Con una misma llave en todos los APK, Android permite ACTUALIZAR
+    // encima sin tener que desinstalar. El keystore lo crea/commitea el CI una vez
+    // (credenciales públicas de debug "android"); no es un secreto real.
+    val stableKeystore = rootProject.file("app/autodiag.keystore")
+    signingConfigs {
+        create("stable") {
+            storeFile = stableKeystore
+            storePassword = "android"
+            keyAlias = "autodiag"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            // Solo aplica la firma estable si el keystore ya existe en el repo;
+            // si no, Gradle usa el debug.keystore por defecto (build local sin CI).
+            if (stableKeystore.exists()) signingConfig = signingConfigs.getByName("stable")
+        }
         release {
             isMinifyEnabled = false
+            if (stableKeystore.exists()) signingConfig = signingConfigs.getByName("stable")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
