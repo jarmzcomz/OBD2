@@ -203,9 +203,9 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     fun readLightSensor() {
         val r = repo() ?: return
         if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress("09") ?: return
         _busy.value = true
         _status.value = "Leyendo sensor de luz…"
-        val mod = VagCatalog.moduleByAddress("09") ?: return
         val did = sensorDid()
         viewModelScope.launch {
             withSession(r) {
@@ -288,6 +288,10 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun <T> withSession(r: com.autodiag.data.ObdRepository, block: suspend () -> T): T {
         r.beginSession()
+        // Espera a que el PID en vuelo del monitor termine y el buffer del ELM327 se
+        // asiente ANTES de mandar el primer comando manual. Sin esto, la respuesta de
+        // un PID en segundo plano se mezcla con la nuestra → "a veces sí, a veces no".
+        kotlinx.coroutines.delay(350)
         return try { block() } finally { r.endSession() }
     }
 
@@ -337,12 +341,25 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                         log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
                         return resp
                     }
+                    // Limpia cualquier resto de un módulo seleccionado antes (un FC SH
+                    // de 0x7xx rompe el re-ensamblado del VIN multi-trama).
                     send("AT CRA")     // limpia filtro de recepción
+                    send("AT FC SD 30 00 00")
+                    send("AT FC SM 0") // control de flujo automático (no forzado)
                     send("AT AR")      // recepción automática
                     send("AT CAF1")    // re-ensamblado ISO-TP automático
                     send("AT SH 7DF")  // cabecera funcional OBD-II
-                    val resp = send("09 02")
-                    val vin = Mode09Decoder.decodeVin(resp)
+                    var resp = send("09 02")
+                    var vin = Mode09Decoder.decodeVin(resp)
+                    // Si el funcional (7DF) no trae VIN, reintenta físico al motor (7E0).
+                    if (vin == null || vin.length < 17) {
+                        send("AT SH 7E0")
+                        send("AT CRA 7E8")
+                        val resp2 = send("09 02")
+                        val vin2 = Mode09Decoder.decodeVin(resp2)
+                        if (vin2 != null && vin2.length >= (vin?.length ?: 0)) { resp = resp2; vin = vin2 }
+                        send("AT CRA")
+                    }
                     _status.value = if (vin != null && vin.length >= 17) {
                         "✓ VIN del vehículo: $vin"
                     } else if (vin != null && vin.length >= 10) {
