@@ -84,38 +84,32 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         _busy.value = true
         _status.value = "Capturando adaptaciones del módulo 09 (${if (isLight) "con LUZ" else "con SOMBRA"})… espera."
         viewModelScope.launch {
-            selectModule(r, mod)
-            runCatching { r.sendRaw("10 03") }
-            val snap = linkedMapOf<String, String>()
-            // Rango de adaptaciones frecuentes en MQB (solo lectura). Acotado para
-            // que no tarde demasiado por Bluetooth.
-            val ranges = listOf(0x0200..0x02FF, 0x0400..0x04FF, 0x0500..0x05FF)
-            var done = 0
-            val total = ranges.sumOf { it.count() }
-            for (range in ranges) {
-                for (did in range) {
-                    val didHex = "%04X".format(did)
-                    val resp = runCatching { r.sendRaw("22 $didHex") }.getOrElse { "" }
-                    val value = positiveValue(resp, didHex)
-                    if (value != null) snap[didHex] = value
-                    done++
-                    if (done % 32 == 0) _status.value = "Escaneando 09… $done/$total (${snap.size} adaptaciones)"
+            withSession(r) {
+                selectModule(r, mod)
+                runCatching { r.sendRaw("10 03") }
+                val snap = linkedMapOf<String, String>()
+                val ranges = listOf(0x0200..0x02FF, 0x0400..0x04FF, 0x0500..0x05FF)
+                var done = 0
+                val total = ranges.sumOf { it.count() }
+                for (range in ranges) {
+                    for (did in range) {
+                        val didHex = "%04X".format(did)
+                        val resp = runCatching { r.sendRaw("22 $didHex") }.getOrElse { "" }
+                        val value = positiveValue(resp, didHex)
+                        if (value != null) snap[didHex] = value
+                        done++
+                        if (done % 32 == 0) _status.value = "Escaneando 09… $done/$total (${snap.size} adaptaciones)"
+                    }
                 }
-            }
-            if (isLight) snapLight = snap else snapDark = snap
-            // Cuando ya hay ambas fotos, DETECTA automáticamente el DID del sensor.
-            val detected = if (snapLight != null && snapDark != null) detectSensorDid() else null
-            _diag.value = buildLightDiff(snap, isLight)
-            _status.value = when {
-                detected != null -> {
-                    "✓ ¡Sensor de luz DETECTADO automáticamente! DID $detected. " +
-                        "Ya puedes mover el slider para ajustarlo (apunta a ese byte)."
+                if (isLight) snapLight = snap else snapDark = snap
+                val detected = if (snapLight != null && snapDark != null) detectSensorDid() else null
+                _diag.value = buildLightDiff(snap, isLight)
+                _status.value = when {
+                    detected != null -> "✓ ¡Sensor detectado! DID $detected. Mueve el slider y aplica."
+                    snapLight != null && snapDark != null ->
+                        "Sin candidato claro. Repite con más contraste (sol directo vs sensor tapado)."
+                    else -> "Foto '${if (isLight) "LUZ" else "SOMBRA"}' guardada. Ahora toma la otra."
                 }
-                snapLight != null && snapDark != null ->
-                    "Comparé luz vs sombra pero no hallé un candidato claro. Repite con MÁS contraste " +
-                        "(sol directo vs sensor tapado con la mano)."
-                else ->
-                    "Foto '${if (isLight) "LUZ" else "SOMBRA"}' guardada (${snap.size} adaptaciones). Ahora toma la otra."
             }
             _busy.value = false
         }
@@ -214,18 +208,19 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val mod = VagCatalog.moduleByAddress("09") ?: return
         val did = sensorDid()
         viewModelScope.launch {
-            selectModule(r, mod)
-            runCatching { r.sendRaw("10 03") }
-            val resp = runCatching { r.sendRaw("22 $did") }.getOrElse { "" }
-            val value = positiveValue(resp, did)
-            if (value != null) {
-                val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
-                // Los 4 bytes forman un entero big-endian que representa la luminosidad.
-                val intVal = bytes.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
-                _lightSensorValue.value = intVal
-                _status.value = "Sensor de luz: 0x${"%08X".format(intVal)} ($intVal lux aprox.)"
-            } else {
-                _status.value = "No se pudo leer el sensor de luz. ${UdsInterpreter.interpret(resp).plain}"
+            withSession(r) {
+                selectModule(r, mod)
+                runCatching { r.sendRaw("10 03") }
+                val resp = runCatching { r.sendRaw("22 $did") }.getOrElse { "" }
+                val value = positiveValue(resp, did)
+                if (value != null) {
+                    val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
+                    val intVal = bytes.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
+                    _lightSensorValue.value = intVal
+                    _status.value = "Sensor de luz: 0x${"%08X".format(intVal)} ($intVal lux aprox.)"
+                } else {
+                    _status.value = "No se pudo leer el sensor de luz. ${UdsInterpreter.interpret(resp).plain}"
+                }
             }
             _busy.value = false
         }
@@ -246,25 +241,26 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         _status.value = "Aplicando nuevo umbral del sensor de luz (DID $did)…"
         val log = StringBuilder("ESCRITURA SENSOR DE LUZ · módulo 09 · DID $did\nNuevo valor: 0x${"%08X".format(newValue)} ($newValue)\n")
         viewModelScope.launch {
-            suspend fun send(cmd: String): String {
-                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
-                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
-                return resp
+            withSession(r) {
+                suspend fun send(cmd: String): String {
+                    val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                    log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                    return resp
+                }
+                selectModule(r, mod)
+                send("10 03")
+                val sec = attemptSecurityAccessLogged(r, mod, ::send)
+                val b = (0..3).map { i -> "%02X".format((newValue shr (24 - i * 8)) and 0xFF) }.joinToString(" ")
+                val writeResp = send("2E $did $b")
+                val result = UdsInterpreter.interpret(writeResp, "2E")
+                _status.value = if (result.ok) {
+                    _lightSensorValue.value = newValue
+                    "✓ Umbral del sensor de luz actualizado. Reinicia el contacto para que el módulo adopte el valor."
+                } else {
+                    "No se pudo escribir el umbral: ${result.plain}$sec"
+                }
+                _diag.value = log.toString()
             }
-            selectModule(r, mod)
-            send("10 03")
-            val sec = attemptSecurityAccessLogged(r, mod, ::send)
-            // Empaqueta el valor como 4 bytes big-endian.
-            val b = (0..3).map { i -> "%02X".format((newValue shr (24 - i * 8)) and 0xFF) }.joinToString(" ")
-            val writeResp = send("2E $did $b")
-            val result = UdsInterpreter.interpret(writeResp, "2E")
-            _status.value = if (result.ok) {
-                _lightSensorValue.value = newValue
-                "✓ Umbral del sensor de luz actualizado. Si las luces no reaccionan distinto, prueba reiniciando el contacto."
-            } else {
-                "No se pudo escribir el umbral: ${result.plain}$sec"
-            }
-            _diag.value = log.toString()
             _busy.value = false
         }
     }
@@ -285,6 +281,16 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun repo() = getApplication<AutoDiagApplication>().activeRepository
 
+    /**
+     * Ejecuta [block] dentro de una sesión manual: pausa el liveData (via
+     * beginSession/endSession) para que los PIDs en segundo plano no se cuelen
+     * entre los comandos AT de la secuencia. SIEMPRE libera al terminar.
+     */
+    private suspend fun <T> withSession(r: com.autodiag.data.ObdRepository, block: suspend () -> T): T {
+        r.beginSession()
+        return try { block() } finally { r.endSession() }
+    }
+
     /** Recorre todos los módulos VAG conocidos y reporta cuáles responden, en texto. */
     fun scanModules() {
         val r = repo() ?: return
@@ -292,25 +298,26 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         _busy.value = true
         _status.value = "Escaneando módulos del auto…"
         viewModelScope.launch {
-            val result = mutableListOf<ModuleStatus>()
-            for (m in VagCatalog.modules) {
-                _status.value = "Consultando: ${m.name}…"
-                selectModule(r, m)
-                // Pedimos el nombre del sistema / VIN para confirmar presencia.
-                val resp = runCatching { r.sendRaw("22 F197") }.getOrElse { "" }
-                val reading = UdsInterpreter.interpret(resp, "22")
-                val ascii = UdsInterpreter.hexToAscii(resp)
-                val present = reading.ok || ascii != null
-                val detail = when {
-                    ascii != null && ascii.length > 2 -> "Identificado como: $ascii"
-                    reading.ok -> "Responde correctamente."
-                    else -> reading.plain
+            withSession(r) {
+                val result = mutableListOf<ModuleStatus>()
+                for (m in VagCatalog.modules) {
+                    _status.value = "Consultando: ${m.name}…"
+                    selectModule(r, m)
+                    val resp = runCatching { r.sendRaw("22 F197") }.getOrElse { "" }
+                    val reading = UdsInterpreter.interpret(resp, "22")
+                    val ascii = UdsInterpreter.hexToAscii(resp)
+                    val present = reading.ok || ascii != null
+                    val detail = when {
+                        ascii != null && ascii.length > 2 -> "Identificado como: $ascii"
+                        reading.ok -> "Responde correctamente."
+                        else -> reading.plain
+                    }
+                    result.add(ModuleStatus(m.address, m.name, present, detail))
+                    _modules.value = result.toList()
                 }
-                result.add(ModuleStatus(m.address, m.name, present, detail))
-                _modules.value = result.toList()
+                val n = result.count { it.present }
+                _status.value = "Escaneo terminado: $n de ${result.size} módulos respondieron."
             }
-            val n = result.count { it.present }
-            _status.value = "Escaneo terminado: $n de ${result.size} módulos respondieron."
             _busy.value = false
         }
     }
@@ -324,30 +331,27 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val log = StringBuilder("LECTURA VIN · Modo 09 Subservicio 02\n")
         viewModelScope.launch {
             try {
-                suspend fun send(cmd: String): String {
-                    val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
-                    log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
-                    return resp
+                withSession(r) {
+                    suspend fun send(cmd: String): String {
+                        val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                        log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                        return resp
+                    }
+                    send("AT CRA")     // limpia filtro de recepción
+                    send("AT AR")      // recepción automática
+                    send("AT CAF1")    // re-ensamblado ISO-TP automático
+                    send("AT SH 7DF")  // cabecera funcional OBD-II
+                    val resp = send("09 02")
+                    val vin = Mode09Decoder.decodeVin(resp)
+                    _status.value = if (vin != null && vin.length >= 17) {
+                        "✓ VIN del vehículo: $vin"
+                    } else if (vin != null && vin.length >= 10) {
+                        "⚠ VIN parcial: $vin (revisa el diagnóstico de abajo)"
+                    } else {
+                        "✗ No se pudo leer el VIN. Respuesta cruda abajo. ${UdsInterpreter.interpret(resp).plain}"
+                    }
+                    _diag.value = log.toString()
                 }
-                // IMPORTANTE: tras un escaneo/volcado el filtro de recepción (AT CRA) queda
-                // fijo en el último módulo. Hay que restaurarlo o el VIN no llega. Para Modo
-                // 09 (OBD estándar) el motor responde en 7E8 con direccionamiento funcional.
-                send("AT CRA")     // limpia el filtro de recepción
-                send("AT AR")      // recepción automática de direcciones
-                send("AT CAF1")    // formato CAN automático: re-ensambla ISO-TP multi-trama
-                send("AT SH 7DF")  // cabecera funcional OBD-II
-                val resp = send("09 02")
-                // El VIN llega multi-trama: usa el decodificador robusto que quita
-                // los contadores de trama ("0:", "1:") antes de pasar a ASCII.
-                val vin = Mode09Decoder.decodeVin(resp)
-                _status.value = if (vin != null && vin.length >= 17) {
-                    "✓ VIN del vehículo: $vin"
-                } else if (vin != null && vin.length >= 10) {
-                    "⚠ VIN parcial: $vin (revisa el diagnóstico de abajo)"
-                } else {
-                    "✗ No se pudo leer el VIN. Respuesta cruda abajo. ${UdsInterpreter.interpret(resp).plain}"
-                }
-                _diag.value = log.toString()
             } finally {
                 _busy.value = false
             }
@@ -370,20 +374,21 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val log = StringBuilder("VOLCADO (solo lectura) · módulo ${mod.address} ${mod.name}\n" +
             "tx ${mod.reqId} / rx ${mod.rspId}\n")
         viewModelScope.launch {
-            suspend fun send(cmd: String): String {
-                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
-                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
-                return resp
+            withSession(r) {
+                suspend fun send(cmd: String): String {
+                    val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                    log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                    return resp
+                }
+                selectModule(r, mod)
+                send("10 03")
+                send("22 F187")
+                send("22 F189")
+                send("22 0600")
+                for (did in listOf("0407", "0408", "02E0", "0293", "0296")) send("22 $did")
+                _status.value = "Volcado listo. Toca 'Copiar' y compártelo."
+                _diag.value = log.toString()
             }
-            selectModule(r, mod)
-            send("10 03")
-            send("22 F187") // nº de pieza VAG
-            send("22 F189") // versión de software
-            send("22 0600") // codificación larga
-            // DIDs de adaptación comunes en MQB (solo lectura, no hace daño).
-            for (did in listOf("0407", "0408", "02E0", "0293", "0296")) send("22 $did")
-            _status.value = "Volcado listo. Toca 'Copiar' y compártelo: con esto mapeo todo sin adivinar."
-            _diag.value = log.toString()
             _busy.value = false
         }
     }
@@ -395,25 +400,27 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         _busy.value = true
         _status.value = "Leyendo configuración actual del auto…"
         viewModelScope.launch {
-            val states = mutableListOf<FeatureState>()
-            for (f in VagCatalog.features) {
-                val mod = VagCatalog.moduleByAddress(f.moduleAddress)
-                if (mod == null) { states.add(FeatureState(f, false, false, "Módulo desconocido.")); continue }
-                selectModule(r, mod)
-                runCatching { r.sendRaw("10 03") } // sesión extendida
-                val resp = runCatching { r.sendRaw("22 ${f.didRead}") }.getOrElse { "" }
-                val block = parseBlock(resp, f.didRead)
-                val state = if (block != null && f.byteIndex < block.size) {
-                    val bitSet = (block[f.byteIndex] and f.bitMask) != 0
-                    val enabled = if (f.onMeansSet) bitSet else !bitSet
-                    FeatureState(f, true, enabled, if (enabled) "Activado ahora" else "Desactivado ahora")
-                } else {
-                    FeatureState(f, false, false, "Tu modelo no expone esta función o no respondió.")
+            withSession(r) {
+                val states = mutableListOf<FeatureState>()
+                for (f in VagCatalog.features) {
+                    val mod = VagCatalog.moduleByAddress(f.moduleAddress)
+                    if (mod == null) { states.add(FeatureState(f, false, false, "Módulo desconocido.")); continue }
+                    selectModule(r, mod)
+                    runCatching { r.sendRaw("10 03") }
+                    val resp = runCatching { r.sendRaw("22 ${f.didRead}") }.getOrElse { "" }
+                    val block = parseBlock(resp, f.didRead)
+                    val state = if (block != null && f.byteIndex < block.size) {
+                        val bitSet = (block[f.byteIndex] and f.bitMask) != 0
+                        val enabled = if (f.onMeansSet) bitSet else !bitSet
+                        FeatureState(f, true, enabled, if (enabled) "Activado ahora" else "Desactivado ahora")
+                    } else {
+                        FeatureState(f, false, false, "Tu modelo no expone esta función o no respondió.")
+                    }
+                    states.add(state)
+                    _features.value = states.toList()
                 }
-                states.add(state)
-                _features.value = states.toList()
+                _status.value = "Configuración leída. Toca un interruptor para cambiarlo."
             }
-            _status.value = "Configuración leída. Toca un interruptor para cambiarlo."
             _busy.value = false
         }
     }
@@ -431,41 +438,37 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         _status.value = "Aplicando: ${f.name} → ${if (turnOn) "ACTIVAR" else "DESACTIVAR"}…"
         val log = StringBuilder("DIAGNÓSTICO · ${f.name}\nMódulo ${mod.address} (tx ${mod.reqId}/rx ${mod.rspId})\n")
         viewModelScope.launch {
-            // Helper local: envía un comando, registra el hex crudo y lo devuelve.
-            suspend fun send(cmd: String): String {
-                val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error: ${it.message}>" }
-                log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
-                return resp
-            }
-            selectModule(r, mod)
-            send("10 03") // sesión extendida
-            // 1) Leer el bloque de codificación ANTES de tocar nada.
-            val resp = send("22 ${f.didRead}")
-            val block = parseBlock(resp, f.didRead)?.toMutableList()
-            if (block == null) {
-                _status.value = "No pude leer la codificación del módulo, así que NO escribí nada (seguro). " +
-                    "Comparte el diagnóstico de abajo y te digo el siguiente paso."
+            withSession(r) {
+                suspend fun send(cmd: String): String {
+                    val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error: ${it.message}>" }
+                    log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                    return resp
+                }
+                selectModule(r, mod)
+                send("10 03")
+                val resp = send("22 ${f.didRead}")
+                val block = parseBlock(resp, f.didRead)?.toMutableList()
+                if (block == null) {
+                    _status.value = "No pude leer la codificación. NO escribí nada. Comparte el diagnóstico abajo."
+                    _diag.value = log.toString()
+                    _busy.value = false; return@withSession
+                }
+                val sec = attemptSecurityAccessLogged(r, mod, ::send)
+                if (f.byteIndex >= block.size) {
+                    _status.value = "Función '${f.name}' no encontrada en esta versión de software. NO escribí nada."
+                    _diag.value = log.toString()
+                    _busy.value = false; return@withSession
+                }
+                val setBit = if (f.onMeansSet) turnOn else !turnOn
+                block[f.byteIndex] = if (setBit) block[f.byteIndex] or f.bitMask
+                    else block[f.byteIndex] and f.bitMask.inv()
+                val payload = block.joinToString(" ") { "%02X".format(it and 0xFF) }
+                val write = send("2E ${f.didRead} $payload")
+                val reading = UdsInterpreter.interpret(write, "2E")
+                _status.value = if (reading.ok) "✓ Listo: '${f.name}' quedó ${if (turnOn) "activado" else "desactivado"}."
+                    else "No se pudo cambiar '${f.name}'. ${reading.plain}$sec\n\nComparte el diagnóstico de abajo."
                 _diag.value = log.toString()
-                _busy.value = false; return@launch
             }
-            // 2) Acceso de seguridad (registrado en el log).
-            val sec = attemptSecurityAccessLogged(r, mod, ::send)
-            // 3) Si el bit objetivo cae fuera del bloque, NO inventamos: avisamos.
-            if (f.byteIndex >= block.size) {
-                _status.value = "Leí la codificación pero el dato de '${f.name}' no está donde se esperaba en TU " +
-                    "versión de software. NO escribí nada. Comparte el diagnóstico de abajo y te doy la posición exacta."
-                _diag.value = log.toString()
-                _busy.value = false; return@launch
-            }
-            val setBit = if (f.onMeansSet) turnOn else !turnOn
-            block[f.byteIndex] = if (setBit) block[f.byteIndex] or f.bitMask
-            else block[f.byteIndex] and f.bitMask.inv()
-            val payload = block.joinToString(" ") { "%02X".format(it and 0xFF) }
-            val write = send("2E ${f.didRead} $payload")
-            val reading = UdsInterpreter.interpret(write, "2E")
-            _status.value = if (reading.ok) "✓ Listo: '${f.name}' quedó ${if (turnOn) "activado" else "desactivado"}."
-            else "No se pudo cambiar '${f.name}'. ${reading.plain}$sec\n\nComparte el diagnóstico de abajo para afinarlo."
-            _diag.value = log.toString()
             loadFeatures()
             _busy.value = false
         }
@@ -531,49 +534,44 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
             "tx ${mod.reqId} / rx ${mod.rspId}\n")
         viewModelScope.launch {
             try {
-                suspend fun send(cmd: String): String {
-                    val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
-                    log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
-                    return resp
+                withSession(r) {
+                    suspend fun send(cmd: String): String {
+                        val resp = runCatching { r.sendRaw(cmd) }.getOrElse { "<error>" }
+                        log.append("» $cmd\n  ← ${resp.trim().ifEmpty { "(vacío)" }}\n")
+                        return resp
+                    }
+                    selectModule(r, mod)
+                    send("10 03")
+                    val userCode = _securityCode.value.replace(Regex("[^0-9]"), "").toIntOrNull()
+                    val login = userCode ?: mod.login
+                    if (login == null) {
+                        _status.value = "Este módulo no tiene login conocido. Pega uno en el campo de código."
+                        _diag.value = log.toString(); _busy.value = false; return@withSession
+                    }
+                    val seedResp = send("27 01")
+                    val seedBytes = parseSeedBytes(seedResp)
+                    if (seedBytes == null) {
+                        _status.value = "✗ No llegó la semilla (27 01). Revisa el diagnóstico abajo."
+                        _diag.value = log.toString(); _busy.value = false; return@withSession
+                    }
+                    if (seedBytes.all { it == 0 }) {
+                        _status.value = "✓ El módulo ya estaba DESBLOQUEADO (semilla en ceros)."
+                        log.append("Semilla = 00... → módulo ya desbloqueado.\n")
+                        _diag.value = log.toString(); _busy.value = false; return@withSession
+                    }
+                    val width = seedBytes.size.coerceIn(2, 4)
+                    val key = (0 until width).joinToString(" ") { i ->
+                        "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
+                    }
+                    val seedHex = seedBytes.joinToString(" ") { "%02X".format(it and 0xFF) }
+                    log.append("Login estático: $login (0x${"%X".format(login)})\n")
+                    log.append("Semilla recibida: $seedHex (${seedBytes.size} bytes)\n")
+                    log.append("Clave calculada:  $key\n")
+                    val res = UdsInterpreter.interpret(send("27 02 $key"), "27")
+                    _status.value = if (res.ok) "✓ ¡Acceso CONCEDIDO! Login $login, clave $key."
+                        else "✗ Llave rechazada: ${res.plain}. Semilla $seedHex, clave $key (ver diagnóstico)."
+                    _diag.value = log.toString()
                 }
-                selectModule(r, mod)
-                send("10 03")
-
-                val userCode = _securityCode.value.replace(Regex("[^0-9]"), "").toIntOrNull()
-                val login = userCode ?: mod.login
-                if (login == null) {
-                    _status.value = "Este módulo no tiene login conocido. Pega uno en el campo de código."
-                    _diag.value = log.toString(); _busy.value = false; return@launch
-                }
-
-                val seedResp = send("27 01")
-                val seedBytes = parseSeedBytes(seedResp)
-                if (seedBytes == null) {
-                    _status.value = "✗ No llegó la semilla (27 01). Revisa el diagnóstico abajo."
-                    _diag.value = log.toString(); _busy.value = false; return@launch
-                }
-                if (seedBytes.all { it == 0 }) {
-                    _status.value = "✓ El módulo ya estaba DESBLOQUEADO (semilla en ceros)."
-                    log.append("Semilla = 00... → módulo ya desbloqueado.\n")
-                    _diag.value = log.toString(); _busy.value = false; return@launch
-                }
-
-                val width = seedBytes.size.coerceIn(2, 4)
-                val key = (0 until width).joinToString(" ") { i ->
-                    "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
-                }
-                val seedHex = seedBytes.joinToString(" ") { "%02X".format(it and 0xFF) }
-                log.append("Login estático: $login (0x${"%X".format(login)})\n")
-                log.append("Semilla recibida: $seedHex (${seedBytes.size} bytes)\n")
-                log.append("Clave calculada:  $key\n")
-
-                val res = UdsInterpreter.interpret(send("27 02 $key"), "27")
-                _status.value = if (res.ok) {
-                    "✓ ¡Acceso CONCEDIDO! Login $login, clave $key. El módulo aceptó la llave."
-                } else {
-                    "✗ Llave rechazada: ${res.plain}. Semilla $seedHex, clave $key (ver diagnóstico)."
-                }
-                _diag.value = log.toString()
             } finally {
                 _busy.value = false
             }

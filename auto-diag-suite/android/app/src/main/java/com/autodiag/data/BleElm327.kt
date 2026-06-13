@@ -17,13 +17,17 @@ import java.io.IOException
 import java.util.UUID
 
 /**
- * Transporte para adaptadores ELM327 que hablan Bluetooth Low Energy (BLE/GATT),
- * como el Vgate iCar Pro BLE 4.0. Estos NO usan RFCOMM/SPP: exponen un modulo
- * serial-BLE con el servicio FFE0 y la caracteristica FFE1 (write + notify).
+ * Transporte BLE para adaptadores ELM327 (ej. Vgate iCar Pro BLE 4.0).
+ * Servicio FFE0 / característica FFE1 (write + notify).
  *
- * El flujo es: connectGatt -> discoverServices -> activar notificaciones en FFE1
- * -> escribir comandos AT en FFE1 -> acumular las notificaciones hasta el prompt
- * '>' del ELM327.
+ * PROBLEMA RAÍZ RESUELTO: el flujo liveData enviaba PIDs cada 500 ms de forma
+ * continua. Entre un comando AT y el siguiente de una secuencia manual (VIN,
+ * acceso de seguridad, sensor de luz) el liveData se colaba y corrompía el
+ * contexto del ELM327 — por eso el VIN "a veces sí, a veces no".
+ *
+ * Solución: [sessionLock] es un contador de sesiones manuales activas.
+ * Mientras sea > 0, el liveData espera sin enviar nada. sendRaw lo incrementa
+ * al entrar y lo decrementa al salir (siempre en un bloque try/finally).
  */
 @SuppressLint("MissingPermission")
 class BleElm327Repository(
@@ -44,12 +48,12 @@ class BleElm327Repository(
     @Volatile private var ready = false
     @Volatile private var failed = false
 
+    // > 0 → hay una sesión manual activa; el liveData pausa.
+    @Volatile private var sessionLock = 0
+
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
-                // Pedir MTU grande ANTES de descubrir servicios: con el MTU por
-                // defecto (23) las respuestas multi-byte (VIN, freeze frame) se
-                // fragmentan. Si requestMtu falla, descubrimos igual.
                 BluetoothProfile.STATE_CONNECTED -> if (!g.requestMtu(517)) g.discoverServices()
                 BluetoothProfile.STATE_DISCONNECTED -> { ready = false }
             }
@@ -79,7 +83,6 @@ class BleElm327Repository(
             ready = true
         }
 
-        // Android < 13 (API < 33): callback sin value explicito.
         @Deprecated("Deprecated in API 33")
         override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
             @Suppress("DEPRECATION")
@@ -87,8 +90,6 @@ class BleElm327Repository(
             appendRx(bytes)
         }
 
-        // Android 13+ (API 33+): SOLO se invoca este; sin el, los telefonos
-        // modernos no recibirian las respuestas del ELM327.
         override fun onCharacteristicChanged(
             g: BluetoothGatt,
             ch: BluetoothGattCharacteristic,
@@ -109,7 +110,7 @@ class BleElm327Repository(
         while (!ready && !failed && System.currentTimeMillis() < deadline) Thread.sleep(50)
         if (failed) throw IOException("BLE FFE0/FFE1 service not found — is this a BLE ELM327?")
         if (!ready) throw IOException("BLE connection timeout")
-        listOf("ATZ", "ATE0", "ATL0", "ATSP0").forEach { send(it); Thread.sleep(150) }
+        listOf("ATZ", "ATE0", "ATL0", "ATSP0").forEach { send(it); Thread.sleep(200) }
     }
 
     @Synchronized
@@ -122,7 +123,9 @@ class BleElm327Repository(
             ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             gatt?.writeCharacteristic(ch)
         }
-        val deadline = System.currentTimeMillis() + 3000
+        // Timeout largo para UDS/ISO-TP (codificaciones, VIN multi-trama).
+        val timeout = if (cmd.startsWith("AT") || cmd.length <= 4) 3_000L else 5_000L
+        val deadline = System.currentTimeMillis() + timeout
         while (System.currentTimeMillis() < deadline) {
             val snapshot = synchronized(rxBuffer) { rxBuffer.toString() }
             if (snapshot.contains(">")) return snapshot.substringBefore(">").trim()
@@ -132,19 +135,17 @@ class BleElm327Repository(
     }
 
     override fun disconnect() {
-        runCatching {
-            gatt?.disconnect()
-            gatt?.close()
-        }
-        gatt = null
-        rxChar = null
-        ready = false
+        runCatching { gatt?.disconnect(); gatt?.close() }
+        gatt = null; rxChar = null; ready = false
     }
 
     override val liveData: Flow<Map<String, Double>> = flow {
         while (true) {
+            // Pausa mientras hay una sesión manual activa (VIN, sensor, seguridad...).
+            if (sessionLock > 0) { delay(200); continue }
             val map = mutableMapOf<String, Double>()
             PidDecoder.PIDS.keys.forEach { code ->
+                if (sessionLock > 0) return@forEach   // aborta el ciclo si se activa lock
                 val raw = send(code)
                 PidDecoder.decodeResponse(raw)?.let { (name, value) -> map[name] = value }
             }
@@ -158,6 +159,9 @@ class BleElm327Repository(
     }.flowOn(Dispatchers.IO)
 
     override suspend fun clearDtcs() { send("04") }
+
+    override fun beginSession() { sessionLock++ }
+    override fun endSession() { if (sessionLock > 0) sessionLock-- }
 
     override suspend fun sendRaw(command: String): String =
         kotlinx.coroutines.withContext(Dispatchers.IO) { send(command) }
