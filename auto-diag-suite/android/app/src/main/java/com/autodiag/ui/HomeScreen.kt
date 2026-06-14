@@ -558,22 +558,27 @@ private fun VagTab(vm: VagViewModel) {
                 Text("💡 Ajustar umbral del sensor de luz", color = Color(0xFFFBD44A),
                     fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Para compensar tu polarizado oscuro. Baja el valor si el auto siempre cree " +
-                    "que está oscuro (enciende luces de día). 'Leer actual' lee el valor de tu T-Cross ahora.",
+                Text("Para compensar tu polarizado oscuro. Baja el % si el auto siempre cree " +
+                    "que está oscuro (enciende luces de día). Se muestra en porcentaje y en hex a la vez. " +
+                    "'Leer actual' lee el valor de tu T-Cross ahora.",
                     color = Color(0xFF9FB3C8), fontSize = 10.sp)
                 Spacer(modifier = Modifier.height(10.dp))
+                // Conversión a porcentaje: 0 = 0% (siempre día), 0x40000000 = 100% (oscuro máx).
+                val fullScale = 0x40000000.toFloat()
+                fun toPct(v: Float): String = "%.1f%%".format((v / fullScale * 100f).coerceIn(0f, 100f))
                 // Valor actual leído vs slider.
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Valor actual del auto:", color = Color(0xFF7C8AA5), fontSize = 11.sp)
                     Text(
-                        if (lightSensorValue < 0) "—  (toca Leer actual)" else "0x${"%08X".format(lightSensorValue)}",
+                        if (lightSensorValue < 0) "—  (toca Leer actual)"
+                        else "${toPct(lightSensorValue.toFloat())}   0x${"%08X".format(lightSensorValue)}",
                         color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Valor a escribir:", color = Color(0xFF7C8AA5), fontSize = 11.sp)
-                    Text("0x${"%08X".format(sliderValue.toInt())}  (${sliderValue.toInt()})",
+                    Text("${toPct(sliderValue)}   0x${"%08X".format(sliderValue.toInt())}  (${sliderValue.toInt()})",
                         color = Color(0xFFFBD44A), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(modifier = Modifier.height(6.dp))
@@ -592,8 +597,8 @@ private fun VagTab(vm: VagViewModel) {
                     )
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("0 (siempre día)", color = Color(0xFF7C8AA5), fontSize = 9.sp)
-                    Text("Oscuro máx", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                    Text("0% (siempre día)", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                    Text("100% (oscuro máx)", color = Color(0xFF7C8AA5), fontSize = 9.sp)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
