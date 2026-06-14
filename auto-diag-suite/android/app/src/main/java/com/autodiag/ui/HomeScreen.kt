@@ -478,9 +478,9 @@ private fun VagTab(vm: VagViewModel) {
         }
         item {
             Text(
-                "⚠ Funciones para VW T-Cross (MQB A0). La app lee el estado real antes de " +
-                    "cambiar nada. Si tu módulo no la soporta o pide acceso de seguridad, el " +
-                    "interruptor te lo dirá en texto en vez de fallar a ciegas.",
+                "⚠ Funciones para VW T-Cross MQB A0. La app lee el estado real antes de cambiar nada. " +
+                    "Toca primero 'Leer estado'. Si el módulo no responde o exige acceso de seguridad, " +
+                    "el interruptor mostrará el motivo sin fallar en silencio.",
                 color = Color(0xFFF59E0B), fontSize = 11.sp
             )
         }
@@ -503,8 +503,8 @@ private fun VagTab(vm: VagViewModel) {
                     ) { Text("Leer tablero/instrumentos", color = Color(0xFF9FB3C8), fontSize = 11.sp) }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Estos botones LEEN los datos del módulo y los muestran abajo para copiar/compartir. " +
-                    "No modifican nada. Para el sensor de luz, lee el módulo confort: ahí está el umbral.",
+                Text("Solo lectura — no modifica nada. El resultado aparece en el panel de Diagnóstico " +
+                    "para que puedas copiarlo. El umbral del sensor de luz está en el módulo confort (09).",
                     color = Color(0xFF7C8AA5), fontSize = 10.sp)
             }
         }
@@ -582,9 +582,15 @@ private fun VagTab(vm: VagViewModel) {
                         color = Color(0xFFFBD44A), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                // El rango del slider: 0 (siempre considera luz) a 0x3FFFFFFF (~máx que vimos).
-                // El valor LUZ de tu auto fue 0x315B34D3, la SOMBRA 0x0A27E547.
-                // Para compensar polarizado: bajar el umbral hacia la zona LUZ pero un poco más bajo.
+                // Indicador de porcentaje centrado y dinámico mientras se desliza.
+                Text(
+                    toPct(sliderValue),
+                    color = Color(0xFFFBD44A),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
                 Slider(
                     value = sliderValue,
                     onValueChange = { sliderValue = it },
@@ -597,8 +603,8 @@ private fun VagTab(vm: VagViewModel) {
                     )
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("0% (siempre día)", color = Color(0xFF7C8AA5), fontSize = 9.sp)
-                    Text("100% (oscuro máx)", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                    Text("0% — siempre día, luces siempre ON", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                    Text("100% — muy oscuro", color = Color(0xFF7C8AA5), fontSize = 9.sp)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -616,11 +622,11 @@ private fun VagTab(vm: VagViewModel) {
                     ) { Text("Aplicar umbral", color = Color(0xFFFBD44A), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
                     Box(
                         modifier = Modifier.weight(1f).background(Color(0xFF4B3A1F), RoundedCornerShape(8.dp))
-                            .clickable(enabled = !busy && lightSensorValue >= 0) {
-                                sliderValue = 0x315B34D3.toFloat() // valor de fábrica (luz)
+                            .clickable(enabled = !busy) {
+                                sliderValue = 0x315B34D3.toFloat()
                             }
                             .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) { Text("Fábrica", color = Color(0xFFCDC8B1), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    ) { Text("Fábrica (76.7%)", color = Color(0xFFCDC8B1), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text("⚠ Después de aplicar, apaga y prende el contacto para que el módulo adopte el nuevo valor.",
@@ -673,10 +679,10 @@ private fun VagTab(vm: VagViewModel) {
         }
         item {
             Text(
-                "La app ya trae los logins conocidos del MQB (módulo 09 → 31347, etc.) e intenta " +
-                    "el acceso una sola vez (sin reintentos, para no bloquear el módulo). Nota: muchos " +
-                    "ELM327 económicos fallan al ESCRIBIR en estos autos, y si tu T-Cross trae SFD, la " +
-                    "escritura requiere desbloqueo online de VW. Leer siempre funciona.",
+                "La app usa los logins estáticos MQB A0 (módulo 09 → 31347, 17 → 47115, 19 → 20103). " +
+                    "Solo intenta el acceso una vez para no bloquear el módulo. " +
+                    "Si tu T-Cross tiene SFD activo (post-2021), la escritura requiere token online de VW — " +
+                    "la lectura siempre funciona sin restricciones.",
                 color = Color(0xFF7C8AA5), fontSize = 10.sp
             )
         }
