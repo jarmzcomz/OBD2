@@ -661,8 +661,9 @@ private fun VagTab(vm: VagViewModel) {
                 Text("🔐 Probar cálculo de clave (sin escribir)", color = Color(0xFF93B4E8),
                     fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Pide la semilla al módulo, calcula la clave con el login estático y la envía. " +
-                    "Verás la semilla y la clave en el diagnóstico de abajo.",
+                Text("Prueba los niveles de seguridad del MQB (03 = codificación primero, luego 01/05/07), " +
+                    "pide la semilla, calcula la clave con el login estático y la envía. " +
+                    "Verás el nivel, la semilla y la clave en el diagnóstico de abajo.",
                     color = Color(0xFF9FB3C8), fontSize = 10.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {

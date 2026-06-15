@@ -257,7 +257,12 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                     _lightSensorValue.value = newValue
                     "✓ Umbral del sensor de luz actualizado. Reinicia el contacto para que el módulo adopte el valor."
                 } else {
-                    "No se pudo escribir el umbral: ${result.plain}$sec"
+                    val hint = if (writeResp.uppercase().replace(Regex("[^0-9A-F]"), "").contains("7F2E31"))
+                        "\n\n⚠ El DID $did rechaza la escritura por 'fuera de rango'. Eso suele significar " +
+                            "que ese DID es la MEDICIÓN VIVA del sensor (solo lectura), no el umbral. Usa " +
+                            "'Capturar LUZ' y 'Capturar SOMBRA' para que la app encuentre el DID correcto del umbral."
+                    else ""
+                    "No se pudo escribir el umbral: ${result.plain}$sec$hint"
                 }
                 _diag.value = log.toString()
             }
@@ -492,12 +497,43 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Acceso de seguridad UDS estático (servicio 0x27 nivel 1/2), como hace VCDS
-     * para codificar en MQB pre-SFD. Usa el login conocido del módulo (ej. 09 →
-     * 31347) o, si el usuario pegó uno, ese. Pide la semilla (27 01), codifica el
-     * login en big-endian con el mismo número de bytes que la semilla y lo envía
-     * (27 02). UN SOLO intento: si falla, NO reintenta (así no se dispara el
-     * bloqueo de ~20 min por exceso de intentos).
+     * Niveles de acceso de seguridad a probar, EN ORDEN. En MQB la CODIFICACIÓN se
+     * protege con el nivel 0x03 (27 03 pide semilla / 27 04 envía clave), no con el
+     * nivel 0x01 — por eso 27 01 devolvía "7F 27 11" (serviceNotSupported). Probamos
+     * 03 primero, luego 01, y un par de niveles altos que algunos módulos usan.
+     */
+    private val securityLevels = listOf(0x03, 0x01, 0x05, 0x07)
+
+    /**
+     * Pide la semilla probando cada nivel de [securityLevels] hasta que uno responda
+     * positivamente (67 <nivel> <semilla>). Devuelve (nivelPedido, bytesSemilla,
+     * respuestaCruda) o null si NINGÚN nivel entregó semilla (módulo sin seed-key
+     * clásico, probablemente SFD). Registra cada intento en el log.
+     */
+    private suspend fun requestSeedAnyLevel(
+        send: suspend (String) -> String,
+        log: StringBuilder
+    ): Triple<Int, List<Int>, String>? {
+        for (level in securityLevels) {
+            val req = "%02X".format(level)
+            val resp = send("27 $req")
+            val seed = parseSeedBytes(resp, level)
+            if (seed != null) {
+                log.append("→ Nivel $req aceptado: el módulo entregó la semilla.\n")
+                return Triple(level, seed, resp)
+            }
+            log.append("→ Nivel $req no entregó semilla (${UdsInterpreter.interpret(resp, "27").plain}).\n")
+        }
+        return null
+    }
+
+    /**
+     * Acceso de seguridad UDS estático (servicio 0x27), como hace VCDS para codificar
+     * en MQB pre-SFD. Prueba los niveles conocidos (03 = codificación, etc.), toma la
+     * semilla del primero que responda, codifica el login en big-endian con el mismo
+     * número de bytes que la semilla y envía la clave (27 <nivel+1>). UN SOLO intento
+     * de clave por nivel: si falla, NO reintenta el mismo nivel (evita el bloqueo de
+     * ~tiempo del módulo por exceso de intentos).
      */
     private suspend fun attemptSecurityAccessLogged(
         r: com.autodiag.data.ObdRepository,
@@ -509,28 +545,25 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val login = userCode ?: mod.login
         if (login == null) return "  (Sin código de seguridad para este módulo: se intentó escribir directo.)"
 
-        val seedResp = send("27 01")
-        val seed = UdsInterpreter.interpret(seedResp, "27")
-        if (!seed.ok) return "  (No se obtuvo la semilla: ${seed.plain})"
+        val log = StringBuilder()
+        val seedResult = requestSeedAnyLevel(send, log)
+            ?: return "  (Ningún nivel de seguridad entregó semilla — este módulo no expone seed-key clásico, probablemente SFD.)"
+        val (level, seedBytes, _) = seedResult
 
         // Si la semilla es toda ceros, el módulo ya está desbloqueado.
-        val seedBytes = parseSeedBytes(seedResp)
-        if (seedBytes != null && seedBytes.all { it == 0 }) {
-            return "  (El módulo ya estaba desbloqueado ✓)"
-        }
+        if (seedBytes.all { it == 0 }) return "  (El módulo ya estaba desbloqueado ✓)"
 
-        // Si no se obtuvo la semilla, calcula con ancho por defecto
-        // Para MQB típicamente es 4 bytes, pero algunos módulos pueden ser 2 o 3
-        val width = (seedBytes?.size ?: 4).coerceIn(2, 4)
+        // Login codificado en big-endian con el mismo ancho que la semilla (2..4 bytes).
+        val width = seedBytes.size.coerceIn(2, 4)
         val key = (0 until width).joinToString(" ") { i ->
             "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
         }
-
-        val res = UdsInterpreter.interpret(send("27 02 $key"), "27")
+        val keyLevel = "%02X".format(level + 1)
+        val res = UdsInterpreter.interpret(send("27 $keyLevel $key"), "27")
         return if (res.ok) {
-            "  (Acceso de seguridad concedido: login $login, semilla (${seedBytes?.size ?: "desconocido"} bytes), ancho clave $width ✓)"
+            "  (Acceso concedido: nivel $level, login $login, semilla ${seedBytes.size} bytes ✓)"
         } else {
-            "  (Login $login no aceptado: ${res.plain} — no se reintenta para no bloquear el módulo)"
+            "  (Login $login rechazado en nivel $level: ${res.plain} — no se reintenta para no bloquear)"
         }
     }
 
@@ -565,14 +598,16 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                         _status.value = "Este módulo no tiene login conocido. Pega uno en el campo de código."
                         _diag.value = log.toString(); _busy.value = false; return@withSession
                     }
-                    val seedResp = send("27 01")
-                    val seedBytes = parseSeedBytes(seedResp)
-                    if (seedBytes == null) {
-                        _status.value = "✗ No llegó la semilla (27 01). Revisa el diagnóstico abajo."
+                    // Prueba nivel 03 (codificación MQB), luego 01/05/07.
+                    val seedResult = requestSeedAnyLevel(::send, log)
+                    if (seedResult == null) {
+                        _status.value = "✗ Ningún nivel entregó semilla. Este módulo no expone seed-key " +
+                            "clásico (probablemente SFD: la escritura exige token online de VW)."
                         _diag.value = log.toString(); _busy.value = false; return@withSession
                     }
+                    val (level, seedBytes, _) = seedResult
                     if (seedBytes.all { it == 0 }) {
-                        _status.value = "✓ El módulo ya estaba DESBLOQUEADO (semilla en ceros)."
+                        _status.value = "✓ El módulo ya estaba DESBLOQUEADO (semilla en ceros, nivel $level)."
                         log.append("Semilla = 00... → módulo ya desbloqueado.\n")
                         _diag.value = log.toString(); _busy.value = false; return@withSession
                     }
@@ -581,12 +616,14 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                         "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
                     }
                     val seedHex = seedBytes.joinToString(" ") { "%02X".format(it and 0xFF) }
+                    val keyLevel = "%02X".format(level + 1)
+                    log.append("Nivel de seguridad: $level (pide 27 ${"%02X".format(level)} / responde 27 $keyLevel)\n")
                     log.append("Login estático: $login (0x${"%X".format(login)})\n")
                     log.append("Semilla recibida: $seedHex (${seedBytes.size} bytes)\n")
                     log.append("Clave calculada:  $key\n")
-                    val res = UdsInterpreter.interpret(send("27 02 $key"), "27")
-                    _status.value = if (res.ok) "✓ ¡Acceso CONCEDIDO! Login $login, clave $key."
-                        else "✗ Llave rechazada: ${res.plain}. Semilla $seedHex, clave $key (ver diagnóstico)."
+                    val res = UdsInterpreter.interpret(send("27 $keyLevel $key"), "27")
+                    _status.value = if (res.ok) "✓ ¡Acceso CONCEDIDO! Nivel $level, login $login, clave $key."
+                        else "✗ Llave rechazada en nivel $level: ${res.plain}. Semilla $seedHex, clave $key (ver diagnóstico)."
                     _diag.value = log.toString()
                 }
             } finally {
@@ -610,12 +647,18 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { r.sendRaw("AT FC SM 1") }
     }
 
-    /** Extrae los bytes de semilla de una respuesta '67 01 <seed...>'. */
-    private fun parseSeedBytes(raw: String): List<Int>? {
+    /**
+     * Extrae los bytes de semilla de una respuesta positiva '67 <nivel> <seed...>'.
+     * [level] es el subservicio pedido (01/03/05/07); la respuesta positiva lleva el
+     * mismo número. Devuelve null si no hay respuesta positiva para ese nivel (p.ej.
+     * un negativo 7F 27 11), así el caller puede probar el siguiente nivel.
+     */
+    private fun parseSeedBytes(raw: String, level: Int = 0x01): List<Int>? {
         val hex = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
-        val pos = hex.indexOf("6701")
+        val marker = "67" + "%02X".format(level)
+        val pos = hex.indexOf(marker)
         if (pos < 0) return null
-        val data = hex.substring(pos + 4)
+        val data = hex.substring(pos + marker.length)
         if (data.length < 2) return null
         return data.chunked(2).mapNotNull { it.toIntOrNull(16) }
     }
