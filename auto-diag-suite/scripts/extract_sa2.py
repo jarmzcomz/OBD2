@@ -27,7 +27,6 @@ VW que ni VCDS evita; el SA2 por sí solo no lo salta. La LECTURA siempre funcio
 """
 import re
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Opcodes válidos de la VM SA2 (ver Sa2SeedKey.kt). Un bytecode real empieza casi
@@ -58,7 +57,8 @@ def from_xml(path: Path):
     for sec in re.findall(r"<SECURITY\b.*?</SECURITY>", text, re.DOTALL | re.IGNORECASE):
         if "SA2" not in sec.upper():
             continue
-        for blob in re.findall(r"<(?:FW-SIGNATURE|VALIDITY-FOR|SECURITY-METHOD)[^>]*>([^<]+)<", sec, re.IGNORECASE):
+        blob_re = r"<(?:FW-SIGNATURE|VALIDITY-FOR|SECURITY-METHOD)[^>]*>([^<]+)<"
+        for blob in re.findall(blob_re, sec, re.IGNORECASE):
             h = re.sub(r"[^0-9A-Fa-f]", "", blob)
             if len(h) % 2 == 0 and len(h) >= 8 and _looks_like_sa2(h):
                 found.append(h.upper())
