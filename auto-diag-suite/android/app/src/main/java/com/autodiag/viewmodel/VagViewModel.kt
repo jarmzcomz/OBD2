@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.autodiag.AutoDiagApplication
 import com.autodiag.data.Mode09Decoder
+import com.autodiag.data.Sa2SeedKey
 import com.autodiag.data.UdsInterpreter
 import com.autodiag.data.VagCatalog
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,6 +67,35 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     val securityCode: StateFlow<String> = _securityCode.asStateFlow()
 
     fun setSecurityCode(code: String) { _securityCode.value = code.trim() }
+
+    /**
+     * Bytecode SA2 (hex) extraído del ODX/FRF del módulo, para calcular la clave con
+     * el algoritmo real de VAG. Si está vacío, se usa el login estático (echo del
+     * login en big-endian), que sirve en módulos pre-SFD muy antiguos pero NO en el
+     * MQB moderno. Pega aquí el bytecode de tu módulo para el cálculo correcto.
+     */
+    private val _sa2Bytecode = MutableStateFlow("")
+    val sa2Bytecode: StateFlow<String> = _sa2Bytecode.asStateFlow()
+
+    fun setSa2Bytecode(code: String) { _sa2Bytecode.value = code.trim() }
+
+    /**
+     * Calcula la clave para una [seedBytes] dada y un [login] estático. Si hay
+     * bytecode SA2 pegado, ejecuta la VM SA2 (algoritmo real MQB) sobre la semilla;
+     * si no, cae al método legacy (login en big-endian con el ancho de la semilla).
+     * Devuelve la clave como string hex "AA BB CC DD".
+     */
+    private fun computeKey(seedBytes: List<Int>, login: Int): String {
+        val bc = Sa2SeedKey.parseBytecode(_sa2Bytecode.value)
+        if (bc != null) {
+            val key = Sa2SeedKey(bc).execute(seedBytes)
+            return (0..3).joinToString(" ") { i -> "%02X".format(((key shr (24 - i * 8)) and 0xFF).toInt()) }
+        }
+        val width = seedBytes.size.coerceIn(2, 4)
+        return (0 until width).joinToString(" ") { i ->
+            "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
+        }
+    }
 
     // Dos "fotos" de las adaptaciones del módulo 09, tomadas con luz y con sombra,
     // para encontrar el DID del sensor de luz por diferencia.
@@ -553,11 +583,8 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         // Si la semilla es toda ceros, el módulo ya está desbloqueado.
         if (seedBytes.all { it == 0 }) return "  (El módulo ya estaba desbloqueado ✓)"
 
-        // Login codificado en big-endian con el mismo ancho que la semilla (2..4 bytes).
-        val width = seedBytes.size.coerceIn(2, 4)
-        val key = (0 until width).joinToString(" ") { i ->
-            "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
-        }
+        // Clave: VM SA2 si hay bytecode pegado; si no, login estático big-endian.
+        val key = computeKey(seedBytes, login)
         val keyLevel = "%02X".format(level + 1)
         val res = UdsInterpreter.interpret(send("27 $keyLevel $key"), "27")
         return if (res.ok) {
@@ -611,13 +638,12 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                         log.append("Semilla = 00... → módulo ya desbloqueado.\n")
                         _diag.value = log.toString(); _busy.value = false; return@withSession
                     }
-                    val width = seedBytes.size.coerceIn(2, 4)
-                    val key = (0 until width).joinToString(" ") { i ->
-                        "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
-                    }
+                    val key = computeKey(seedBytes, login)
                     val seedHex = seedBytes.joinToString(" ") { "%02X".format(it and 0xFF) }
                     val keyLevel = "%02X".format(level + 1)
+                    val method = if (Sa2SeedKey.parseBytecode(_sa2Bytecode.value) != null) "VM SA2 (bytecode)" else "login estático"
                     log.append("Nivel de seguridad: $level (pide 27 ${"%02X".format(level)} / responde 27 $keyLevel)\n")
+                    log.append("Método de clave: $method\n")
                     log.append("Login estático: $login (0x${"%X".format(login)})\n")
                     log.append("Semilla recibida: $seedHex (${seedBytes.size} bytes)\n")
                     log.append("Clave calculada:  $key\n")

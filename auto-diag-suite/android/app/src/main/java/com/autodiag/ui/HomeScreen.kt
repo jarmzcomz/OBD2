@@ -378,6 +378,7 @@ private fun VagTab(vm: VagViewModel) {
     val status by vm.status.collectAsState()
     val busy by vm.busy.collectAsState()
     val securityCode by vm.securityCode.collectAsState()
+    val sa2Bytecode by vm.sa2Bytecode.collectAsState()
     val diag by vm.diag.collectAsState()
     val lightSensorValue by vm.lightSensorValue.collectAsState()
     val detectedSensorDid by vm.detectedSensorDid.collectAsState()
@@ -651,6 +652,38 @@ private fun VagTab(vm: VagViewModel) {
                     unfocusedLabelColor = Color(0xFF7C8AA5)
                 )
             )
+        }
+        // Campo para el bytecode SA2 (algoritmo real seed-key del MQB).
+        item {
+            Column(modifier = Modifier.fillMaxWidth()
+                .background(Color(0xFF0E1B14), RoundedCornerShape(12.dp))
+                .border(1.dp, Color(0xFF1F4030), RoundedCornerShape(12.dp))
+                .padding(12.dp)) {
+                Text("🧬 Bytecode SA2 (algoritmo real de la clave)", color = Color(0xFF6EE7A0),
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("El MQB calcula la clave con un pequeño programa (bytecode) ÚNICO de tu módulo, " +
+                    "que vive dentro del archivo de flasheo de VW (ODX/FRF). Si lo pegas aquí (ej. " +
+                    "68 03 81 93 …), la app ejecuta el algoritmo REAL en vez del login estático. " +
+                    "Sin él no existe clave universal para MQB.",
+                    color = Color(0xFF9FB3C8), fontSize = 10.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = sa2Bytecode,
+                    onValueChange = { vm.setSa2Bytecode(it) },
+                    label = { Text("Bytecode SA2 en hex (opcional)", fontSize = 12.sp) },
+                    placeholder = { Text("68 03 81 93 54 41 4A 49 …", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFFE5EAF2),
+                        unfocusedTextColor = Color(0xFFE5EAF2),
+                        focusedBorderColor = Color(0xFF22C55E),
+                        unfocusedBorderColor = Color(0xFF1E2A3D),
+                        focusedLabelColor = Color(0xFF6EE7A0),
+                        unfocusedLabelColor = Color(0xFF7C8AA5)
+                    )
+                )
+            }
         }
         // Botones para PROBAR el acceso de seguridad (calcula la clave) sin escribir.
         item {
