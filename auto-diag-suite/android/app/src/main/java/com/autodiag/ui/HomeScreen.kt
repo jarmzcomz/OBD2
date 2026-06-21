@@ -56,8 +56,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -380,21 +378,10 @@ private fun VagTab(vm: VagViewModel) {
     val securityCode by vm.securityCode.collectAsState()
     val sa2Bytecode by vm.sa2Bytecode.collectAsState()
     val diag by vm.diag.collectAsState()
-    val lightSensorValue by vm.lightSensorValue.collectAsState()
     val detectedSensorDid by vm.detectedSensorDid.collectAsState()
     val monitoring by vm.monitoring.collectAsState()
     val lightHistory by vm.lightHistory.collectAsState()
     val clipboard = LocalClipboardManager.current
-    // Valor del slider (se inicializa del valor leído del auto).
-    var sliderValue by rememberSaveable { mutableStateOf(0f) }
-    // Sincroniza el slider cuando llega el valor del auto.
-    androidx.compose.runtime.LaunchedEffect(lightSensorValue) {
-        if (lightSensorValue >= 0) sliderValue = lightSensorValue.toFloat()
-    }
-
-    // Conversión a porcentaje del umbral del sensor: 0 = 0% (día), 0x40000000 = 100%.
-    val fullScale = 0x40000000.toFloat()
-    fun toPct(v: Float): String = "%.1f%%".format((v / fullScale * 100f).coerceIn(0f, 100f))
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -454,92 +441,26 @@ private fun VagTab(vm: VagViewModel) {
             items(modules, key = { it.address }) { m -> ModuleRow(m) }
         }
 
-        // ───────── Sensor de luz (todo en una tarjeta: buscar + ajustar) ─────────
+        // ───────── Sensor de luz (diagnóstico honesto) ─────────
         item {
             VagCard(
-                "💡 Sensor de luz (polarizado)", Color(0xFFFBD44A),
+                "💡 Sensor de luz (diagnóstico)", Color(0xFFFBD44A),
                 bg = Color(0xFF0F1E2D), border = Color(0xFF1E4060),
-                help = "El DID 02E0 es la luz MEDIDA en vivo (cambia sola con el ambiente), no el " +
-                    "umbral. El umbral real vive en el módulo 09, que en tu T-Cross está bloqueado " +
-                    "por SFD: escribirlo exige token online de VW. Por eso 'Aplicar' da error. Lo más " +
-                    "útil hoy es el Monitor en vivo de abajo: mide cuánta luz pierde el sensor por tu " +
-                    "polarizado. Las capturas LUZ/SOMBRA quedan para detectar el byte si algún día se " +
-                    "desbloquea el módulo."
+                help = "Hallazgo confirmado en TU auto: el DID 02E0 NO es el sensor de luz — su valor " +
+                    "salta al azar por todo el rango aunque el carro esté quieto. Y el umbral verdadero " +
+                    "vive en el módulo 09, bloqueado por SFD (escribir exige token online de VW). Por eso " +
+                    "el ajuste del sensor no se puede hacer por DIY. El camino real es un taller con " +
+                    "ODIS/acceso online — usa el botón 'Informe para el taller' de abajo."
             ) {
-                // Paso 1 — detección.
-                Text("1 · Detectar el byte del sensor", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    PillButton("☀ Capturar LUZ", Modifier.weight(1f), enabled = !busy) { vm.captureLightSnapshot(true) }
-                    PillButton("🌑 Capturar SOMBRA", Modifier.weight(1f), bg = Color(0xFF24344A), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.captureLightSnapshot(false) }
-                }
-                if (detectedSensorDid != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF14331F), RoundedCornerShape(8.dp)).padding(10.dp)) {
-                        Text("✓ Sensor detectado: DID $detectedSensorDid", color = Color(0xFF6EE7A0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                Text("Borrar capturas", color = Color(0xFF7C8AA5), fontSize = 10.sp,
-                    modifier = Modifier.clickable(enabled = !busy) { vm.resetLightSnapshots() }.padding(vertical = 2.dp))
-
-                Spacer(Modifier.height(14.dp))
-                // Paso 2 — ajuste.
-                Text("2 · Ajustar el umbral", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Actual del auto:", color = Color(0xFF7C8AA5), fontSize = 11.sp)
-                    Text(
-                        if (lightSensorValue < 0) "—  (toca Leer actual)"
-                        else "${toPct(lightSensorValue.toFloat())}   0x${"%08X".format(lightSensorValue)}",
-                        color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Text(
-                    toPct(sliderValue),
-                    color = Color(0xFFFBD44A), fontSize = 26.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
-                )
-                Text(
-                    "0x${"%08X".format(sliderValue.toInt())}",
-                    color = Color(0xFF7C8AA5), fontSize = 10.sp, fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
-                )
-                Slider(
-                    value = sliderValue,
-                    onValueChange = { sliderValue = it },
-                    valueRange = 0f..0x40000000.toFloat(),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFFFBD44A),
-                        activeTrackColor = Color(0xFFFBD44A),
-                        inactiveTrackColor = Color(0xFF24344A)
-                    )
-                )
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("0% · día", color = Color(0xFF7C8AA5), fontSize = 9.sp)
-                    Text("100% · oscuro", color = Color(0xFF7C8AA5), fontSize = 9.sp)
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    PillButton("Leer actual", Modifier.weight(1f), enabled = !busy) { vm.readLightSensor() }
-                    PillButton("Aplicar", Modifier.weight(1f), bg = Color(0xFF7A5C00), fg = Color(0xFFFBD44A), enabled = !busy && lightSensorValue >= 0) {
-                        vm.writeLightSensorThreshold(sliderValue.toInt())
-                    }
-                    PillButton("Fábrica", Modifier.weight(1f), bg = Color(0xFF4B3A1F), fg = Color(0xFFCDC8B1), enabled = !busy && !monitoring) {
-                        sliderValue = 0x315B34D3.toFloat()
-                    }
-                }
-
-                Spacer(Modifier.height(14.dp))
-                // Monitor de luz en vivo (02E0 es una medición viva, no un umbral).
-                Text("📈 Monitor de luz en vivo", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                // Monitor crudo de 02E0 (no es el sensor; queda solo como diagnóstico).
+                Text("📈 Monitor del DID 02E0 (crudo)", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(2.dp))
-                Text("02E0 es la luz MEDIDA ahora (cambia sola con el ambiente). Tapa/destapa el " +
-                    "sensor para ver cuánto baja con tu polarizado.", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                Text("Solo diagnóstico: este valor cambia en cada lectura, lo que CONFIRMA que no es la " +
+                    "luz del sensor. Sirve únicamente para ver el comportamiento crudo del módulo.",
+                    color = Color(0xFF7C8AA5), fontSize = 9.sp)
                 Spacer(Modifier.height(8.dp))
                 PillButton(
-                    if (monitoring) "⏸ Detener monitor" else "▶ Iniciar monitor en vivo",
+                    if (monitoring) "⏸ Detener monitor" else "▶ Iniciar monitor (crudo)",
                     Modifier.fillMaxWidth(),
                     bg = if (monitoring) Color(0xFF4B1F1F) else Color(0xFF12333A),
                     fg = if (monitoring) Color(0xFFF0A0A0) else Color(0xFF7FD0E0),
@@ -550,12 +471,46 @@ private fun VagTab(vm: VagViewModel) {
                     Spacer(Modifier.height(8.dp))
                     LineChart(values = lightHistory.map { it.toFloat() }, min = mn.toFloat(), max = mx.coerceAtLeast(mn + 1).toFloat())
                     Spacer(Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("mín ${toPct(mn.toFloat())}", color = Color(0xFF7C8AA5), fontSize = 9.sp)
-                        Text("ahora ${toPct(lightHistory.last().toFloat())}", color = Color(0xFF7FD0E0), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                        Text("máx ${toPct(mx.toFloat())}", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                    Text("ahora 0x${"%08X".format(lightHistory.last())}", color = Color(0xFF7FD0E0), fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                }
+
+                Spacer(Modifier.height(14.dp))
+                // Búsqueda experimental del byte real por diferencia luz/sombra.
+                Text("🔬 Buscar el byte real (experimental)", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(2.dp))
+                Text("A pleno sol toca LUZ; tapa el sensor y toca SOMBRA. Compara adaptaciones para buscar " +
+                    "el byte que cambia con la luz (aunque escribirlo siga requiriendo desbloqueo SFD).",
+                    color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    PillButton("☀ Capturar LUZ", Modifier.weight(1f), enabled = !busy) { vm.captureLightSnapshot(true) }
+                    PillButton("🌑 Capturar SOMBRA", Modifier.weight(1f), bg = Color(0xFF24344A), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.captureLightSnapshot(false) }
+                }
+                if (detectedSensorDid != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF14331F), RoundedCornerShape(8.dp)).padding(10.dp)) {
+                        Text("Candidato: DID $detectedSensorDid (por verificar)", color = Color(0xFF6EE7A0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                Text("Borrar capturas", color = Color(0xFF7C8AA5), fontSize = 10.sp,
+                    modifier = Modifier.clickable(enabled = !busy) { vm.resetLightSnapshots() }.padding(vertical = 2.dp))
+            }
+        }
+
+        // ───────── Informe para el taller ─────────
+        item {
+            VagCard(
+                "📋 Informe para el taller", Color(0xFF93B4E8),
+                bg = Color(0xFF12202E), border = Color(0xFF24405A),
+                help = "Genera un resumen con tus módulos, números de pieza, software y exactamente qué " +
+                    "pedirle al técnico (ajustar la sensibilidad de luz del módulo 09, protegido por SFD). " +
+                    "Cópialo y mándaselo: le ahorra tiempo y a ti dinero."
+            ) {
+                PillButton("Generar informe", Modifier.fillMaxWidth(), bg = Color(0xFF1E3A5F), enabled = !busy) { vm.generateWorkshopReport() }
+                Spacer(Modifier.height(6.dp))
+                Text("Aparece arriba en el panel 'Diagnóstico' para copiar/compartir.", color = Color(0xFF7C8AA5), fontSize = 9.sp)
             }
         }
 

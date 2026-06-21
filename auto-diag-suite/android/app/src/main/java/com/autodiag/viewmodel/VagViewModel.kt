@@ -530,6 +530,46 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Genera un informe en texto (en el panel de diagnóstico) con los datos de los
+     * módulos clave y exactamente qué pedirle al taller. Pensado para copiar/compartir,
+     * para que un técnico con acceso online (ODIS/GeKo) haga el ajuste en minutos.
+     */
+    fun generateWorkshopReport() {
+        val r = repo() ?: return
+        if (_busy.value) return
+        _busy.value = true
+        _status.value = "Generando informe para el taller…"
+        val sb = StringBuilder("INFORME PARA EL TALLER · VW T-Cross (MQB A0)\n")
+        sb.append("Generado por la app AutoDiag\n\n")
+        viewModelScope.launch {
+            withSession(r) {
+                suspend fun ident(addr: String, name: String) {
+                    val mod = VagCatalog.moduleByAddress(addr) ?: return
+                    selectModule(r, mod)
+                    runCatching { r.sendRaw("10 03") }
+                    val part = didAscii(runCatching { r.sendRaw("22 F187") }.getOrElse { "" }, "F187")
+                    val sw = didAscii(runCatching { r.sendRaw("22 F189") }.getOrElse { "" }, "F189")
+                    sb.append("• Módulo $addr ($name): pieza ${part ?: "?"}, SW ${sw ?: "?"}\n")
+                }
+                ident("09", "Electrónica central / BCM")
+                ident("17", "Tablero / Instrumentos")
+                ident("19", "Gateway")
+                sb.append("\nSOLICITUD:\n")
+                sb.append("Ajustar la sensibilidad del sensor de luz / luz automática (parámetro de ")
+                sb.append("activación 'Aktivierungshelligkeit') en el módulo 09 (BCM). El parabrisas tiene ")
+                sb.append("polarizado oscuro que engaña al sensor y enciende las luces de día.\n\n")
+                sb.append("NOTA TÉCNICA (para el técnico):\n")
+                sb.append("El módulo 09 está protegido por SFD: requiere acceso online de VW (ODIS + GeKo) ")
+                sb.append("o herramienta con token SFD. No es codificación libre.\n")
+                sb.append("Verificado: 27 03 / 27 01 / 27 05 / 27 07 → 7F 27 11 (serviceNotSupported) = SFD.\n")
+                _diag.value = sb.toString()
+                _status.value = "✓ Informe listo. Toca 'Copiar' en el panel de Diagnóstico de arriba."
+            }
+            _busy.value = false
+        }
+    }
+
     /** Lee el estado actual de todos los interruptores de funciones. */
     fun loadFeatures() {
         val r = repo() ?: return
