@@ -382,6 +382,8 @@ private fun VagTab(vm: VagViewModel) {
     val diag by vm.diag.collectAsState()
     val lightSensorValue by vm.lightSensorValue.collectAsState()
     val detectedSensorDid by vm.detectedSensorDid.collectAsState()
+    val monitoring by vm.monitoring.collectAsState()
+    val lightHistory by vm.lightHistory.collectAsState()
     val clipboard = LocalClipboardManager.current
     // Valor del slider (se inicializa del valor leído del auto).
     var sliderValue by rememberSaveable { mutableStateOf(0f) }
@@ -457,11 +459,12 @@ private fun VagTab(vm: VagViewModel) {
             VagCard(
                 "💡 Sensor de luz (polarizado)", Color(0xFFFBD44A),
                 bg = Color(0xFF0F1E2D), border = Color(0xFF1E4060),
-                help = "Para tu polarizado oscuro: si el auto cree que está de noche y prende las " +
-                    "luces de día, baja el %. Paso 1 (opcional pero recomendado): a pleno sol toca " +
-                    "'Capturar LUZ', tapa el sensor y toca 'Capturar SOMBRA' — la app halla solo el " +
-                    "byte correcto. Paso 2: 'Leer actual', mueve el slider y 'Aplicar'. Tras aplicar, " +
-                    "apaga y prende el contacto para que el módulo tome el valor."
+                help = "El DID 02E0 es la luz MEDIDA en vivo (cambia sola con el ambiente), no el " +
+                    "umbral. El umbral real vive en el módulo 09, que en tu T-Cross está bloqueado " +
+                    "por SFD: escribirlo exige token online de VW. Por eso 'Aplicar' da error. Lo más " +
+                    "útil hoy es el Monitor en vivo de abajo: mide cuánta luz pierde el sensor por tu " +
+                    "polarizado. Las capturas LUZ/SOMBRA quedan para detectar el byte si algún día se " +
+                    "desbloquea el módulo."
             ) {
                 // Paso 1 — detección.
                 Text("1 · Detectar el byte del sensor", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
@@ -523,8 +526,34 @@ private fun VagTab(vm: VagViewModel) {
                     PillButton("Aplicar", Modifier.weight(1f), bg = Color(0xFF7A5C00), fg = Color(0xFFFBD44A), enabled = !busy && lightSensorValue >= 0) {
                         vm.writeLightSensorThreshold(sliderValue.toInt())
                     }
-                    PillButton("Fábrica", Modifier.weight(1f), bg = Color(0xFF4B3A1F), fg = Color(0xFFCDC8B1), enabled = !busy) {
+                    PillButton("Fábrica", Modifier.weight(1f), bg = Color(0xFF4B3A1F), fg = Color(0xFFCDC8B1), enabled = !busy && !monitoring) {
                         sliderValue = 0x315B34D3.toFloat()
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+                // Monitor de luz en vivo (02E0 es una medición viva, no un umbral).
+                Text("📈 Monitor de luz en vivo", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(2.dp))
+                Text("02E0 es la luz MEDIDA ahora (cambia sola con el ambiente). Tapa/destapa el " +
+                    "sensor para ver cuánto baja con tu polarizado.", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                Spacer(Modifier.height(8.dp))
+                PillButton(
+                    if (monitoring) "⏸ Detener monitor" else "▶ Iniciar monitor en vivo",
+                    Modifier.fillMaxWidth(),
+                    bg = if (monitoring) Color(0xFF4B1F1F) else Color(0xFF12333A),
+                    fg = if (monitoring) Color(0xFFF0A0A0) else Color(0xFF7FD0E0),
+                    enabled = !busy
+                ) { vm.toggleLightMonitor() }
+                if (lightHistory.size >= 2) {
+                    val mn = lightHistory.min(); val mx = lightHistory.max()
+                    Spacer(Modifier.height(8.dp))
+                    LineChart(values = lightHistory.map { it.toFloat() }, min = mn.toFloat(), max = mx.coerceAtLeast(mn + 1).toFloat())
+                    Spacer(Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("mín ${toPct(mn.toFloat())}", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                        Text("ahora ${toPct(lightHistory.last().toFloat())}", color = Color(0xFF7FD0E0), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        Text("máx ${toPct(mx.toFloat())}", color = Color(0xFF7C8AA5), fontSize = 9.sp)
                     }
                 }
             }

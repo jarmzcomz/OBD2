@@ -8,6 +8,7 @@ import com.autodiag.data.Mode09Decoder
 import com.autodiag.data.Sa2SeedKey
 import com.autodiag.data.UdsInterpreter
 import com.autodiag.data.VagCatalog
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -253,6 +254,56 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             _busy.value = false
+        }
+    }
+
+    // ───────── Monitor de luz en vivo ─────────
+    // El DID 02E0 es la MEDICIÓN VIVA del sensor (cambia segundo a segundo con la luz
+    // ambiente). No es escribible. Pero leerlo en bucle sirve para VER cuánta luz pierde
+    // el sensor a través del polarizado: un monitor/diagnóstico honesto y útil.
+    private val _monitoring = MutableStateFlow(false)
+    val monitoring: StateFlow<Boolean> = _monitoring.asStateFlow()
+
+    private val _lightHistory = MutableStateFlow<List<Int>>(emptyList())
+    val lightHistory: StateFlow<List<Int>> = _lightHistory.asStateFlow()
+
+    private var monitorJob: Job? = null
+
+    /** Arranca o detiene el monitor de luz en vivo (lee 02E0 cada segundo). */
+    fun toggleLightMonitor() {
+        if (_monitoring.value) {
+            _monitoring.value = false
+            monitorJob?.cancel(); monitorJob = null
+            _status.value = "Monitor detenido."
+            return
+        }
+        val r = repo() ?: return
+        if (_busy.value) return
+        val mod = VagCatalog.moduleByAddress("09") ?: return
+        val did = sensorDid()
+        _monitoring.value = true
+        _lightHistory.value = emptyList()
+        _status.value = "📈 Monitor de luz en vivo… tapa/destapa el sensor para ver el cambio."
+        monitorJob = viewModelScope.launch {
+            r.beginSession()
+            try {
+                kotlinx.coroutines.delay(350)
+                selectModule(r, mod)
+                runCatching { r.sendRaw("10 03") }
+                while (_monitoring.value) {
+                    val resp = runCatching { r.sendRaw("22 $did") }.getOrElse { "" }
+                    val value = positiveValue(resp, did)
+                    if (value != null) {
+                        val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
+                        val intVal = bytes.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
+                        _lightSensorValue.value = intVal
+                        _lightHistory.value = (_lightHistory.value + intVal).takeLast(60)
+                    }
+                    kotlinx.coroutines.delay(1000)
+                }
+            } finally {
+                r.endSession()
+            }
         }
     }
 
