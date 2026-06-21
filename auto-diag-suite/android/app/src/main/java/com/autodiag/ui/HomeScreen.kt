@@ -541,9 +541,10 @@ private fun VagTab(vm: VagViewModel) {
                     PillButton("Leer estado", enabled = !busy) { vm.loadFeatures() }
                 }
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    PillButton("Leer confort (09)", Modifier.weight(1f), bg = Color(0xFF142235), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.dumpCoding("09") }
-                    PillButton("Leer tablero (17)", Modifier.weight(1f), bg = Color(0xFF142235), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.dumpCoding("17") }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    PillButton("Confort 09", Modifier.weight(1f), bg = Color(0xFF142235), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.dumpCoding("09") }
+                    PillButton("Tablero 17", Modifier.weight(1f), bg = Color(0xFF142235), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.dumpCoding("17") }
+                    PillButton("Gateway 19", Modifier.weight(1f), bg = Color(0xFF142235), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.dumpCoding("19") }
                 }
                 Spacer(Modifier.height(10.dp))
                 if (features.isEmpty()) {

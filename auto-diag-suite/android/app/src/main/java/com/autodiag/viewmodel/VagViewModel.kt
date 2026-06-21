@@ -300,6 +300,34 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Quita los marcadores de trama ("0:", "1:", "2:") que el ELM327 intercala en
+     * respuestas multi-trama. Si no se quitan, el dígito del contador se mete entre
+     * los bytes y corrompe la decodificación (ASCII desalineado).
+     */
+    private fun stripFrameMarkers(raw: String): String =
+        raw.replace(Regex("[0-9A-Fa-f]:"), " ")
+
+    /**
+     * Decodifica el valor de un DID a ASCII imprimible — para número de pieza (F187)
+     * y versión de software (F189). Limpia marcadores de trama y bytes de relleno (AA).
+     */
+    private fun didAscii(raw: String, did: String): String? {
+        val hex = stripFrameMarkers(raw).uppercase().replace(Regex("[^0-9A-F]"), "")
+        val marker = "62" + did.uppercase().replace(" ", "")
+        val pos = hex.indexOf(marker)
+        if (pos < 0) return null
+        val data = hex.substring(pos + marker.length)
+        val sb = StringBuilder()
+        var i = 0
+        while (i + 1 < data.length) {
+            val b = data.substring(i, i + 2).toIntOrNull(16) ?: break
+            if (b in 0x20..0x7E) sb.append(b.toChar())
+            i += 2
+        }
+        return sb.toString().trim().ifBlank { null }
+    }
+
     /** Devuelve el valor (hex) de una respuesta positiva '62 <did> <bytes>', o null. */
     private fun positiveValue(raw: String, did: String): String? {
         val hex = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
@@ -434,11 +462,17 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 selectModule(r, mod)
                 send("10 03")
-                send("22 F187")
-                send("22 F189")
+                val partResp = send("22 F187")
+                val swResp = send("22 F189")
+                val part = didAscii(partResp, "F187")
+                val sw = didAscii(swResp, "F189")
+                // Encabezado decodificado en texto claro (no solo hex).
+                log.insert(0, "Pieza: ${part ?: "?"}    Software: ${sw ?: "?"}\n")
                 send("22 0600")
                 for (did in listOf("0407", "0408", "02E0", "0293", "0296")) send("22 $did")
-                _status.value = "Volcado listo. Toca 'Copiar' y compártelo."
+                _status.value = if (part != null)
+                    "Pieza $part · SW ${sw ?: "?"}. Volcado listo — toca 'Copiar'."
+                else "Volcado listo. Toca 'Copiar' y compártelo."
                 _diag.value = log.toString()
             }
             _busy.value = false
@@ -535,6 +569,13 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     private val securityLevels = listOf(0x03, 0x01, 0x05, 0x07)
 
     /**
+     * True si el último intento de semilla falló porque TODOS los niveles respondieron
+     * "serviceNotSupported" (7F 27 11) — patrón típico de un módulo protegido por SFD,
+     * donde el seed-key clásico está deshabilitado y escribir exige token online de VW.
+     */
+    private var lastFailureSfd = false
+
+    /**
      * Pide la semilla probando cada nivel de [securityLevels] hasta que uno responda
      * positivamente (67 <nivel> <semilla>). Devuelve (nivelPedido, bytesSemilla,
      * respuestaCruda) o null si NINGÚN nivel entregó semilla (módulo sin seed-key
@@ -544,16 +585,24 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         send: suspend (String) -> String,
         log: StringBuilder
     ): Triple<Int, List<Int>, String>? {
+        var allServiceNotSupported = true
         for (level in securityLevels) {
             val req = "%02X".format(level)
             val resp = send("27 $req")
             val seed = parseSeedBytes(resp, level)
             if (seed != null) {
                 log.append("→ Nivel $req aceptado: el módulo entregó la semilla.\n")
+                lastFailureSfd = false
                 return Triple(level, seed, resp)
             }
+            // Detecta el NRC: 7F 27 <nrc>. SFD = 0x11 (serviceNotSupported) en todos.
+            val hex = resp.uppercase().replace(Regex("[^0-9A-F]"), "")
+            val idx = hex.indexOf("7F27")
+            val nrc = if (idx >= 0 && hex.length >= idx + 6) hex.substring(idx + 4, idx + 6) else ""
+            if (nrc != "11") allServiceNotSupported = false
             log.append("→ Nivel $req no entregó semilla (${UdsInterpreter.interpret(resp, "27").plain}).\n")
         }
+        lastFailureSfd = allServiceNotSupported
         return null
     }
 
@@ -577,7 +626,8 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
 
         val log = StringBuilder()
         val seedResult = requestSeedAnyLevel(send, log)
-            ?: return "  (Ningún nivel de seguridad entregó semilla — este módulo no expone seed-key clásico, probablemente SFD.)"
+            ?: return if (lastFailureSfd) "  (🔒 Módulo bloqueado por SFD — escribir exige token online de VW.)"
+                else "  (Ningún nivel de seguridad entregó semilla.)"
         val (level, seedBytes, _) = seedResult
 
         // Si la semilla es toda ceros, el módulo ya está desbloqueado.
@@ -628,8 +678,11 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                     // Prueba nivel 03 (codificación MQB), luego 01/05/07.
                     val seedResult = requestSeedAnyLevel(::send, log)
                     if (seedResult == null) {
-                        _status.value = "✗ Ningún nivel entregó semilla. Este módulo no expone seed-key " +
-                            "clásico (probablemente SFD: la escritura exige token online de VW)."
+                        _status.value = if (lastFailureSfd)
+                            "🔒 Módulo ${mod.address} bloqueado por SFD. Todos los niveles responden " +
+                                "'no soportado' — escribir exige token online de VW (ODIS/GeKo). Leer siempre funciona."
+                        else
+                            "✗ Ningún nivel entregó semilla en módulo ${mod.address}. Revisa el diagnóstico."
                         _diag.value = log.toString(); _busy.value = false; return@withSession
                     }
                     val (level, seedBytes, _) = seedResult
