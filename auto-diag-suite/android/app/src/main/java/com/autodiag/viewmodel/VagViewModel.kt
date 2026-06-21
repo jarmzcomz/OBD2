@@ -119,27 +119,35 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                 selectModule(r, mod)
                 runCatching { r.sendRaw("10 03") }
                 val snap = linkedMapOf<String, String>()
-                val ranges = listOf(0x0200..0x02FF, 0x0400..0x04FF, 0x0500..0x05FF)
+                var noise = 0
+                // Rango ampliado de adaptaciones MQB del BCM.
+                val ranges = listOf(0x0200..0x06FF)
                 var done = 0
                 val total = ranges.sumOf { it.count() }
                 for (range in ranges) {
                     for (did in range) {
                         val didHex = "%04X".format(did)
                         val resp = runCatching { r.sendRaw("22 $didHex") }.getOrElse { "" }
-                        val value = positiveValue(resp, didHex)
-                        if (value != null) snap[didHex] = value
+                        val v1 = positiveValue(resp, didHex)
+                        if (v1 != null) {
+                            // FILTRO DE ESTABILIDAD: lee otra vez. Si el valor cambia solo
+                            // (como el 02E0), es ruido/contador, NO una adaptación → se descarta.
+                            val resp2 = runCatching { r.sendRaw("22 $didHex") }.getOrElse { "" }
+                            val v2 = positiveValue(resp2, didHex)
+                            if (v2 == v1) snap[didHex] = v1 else noise++
+                        }
                         done++
-                        if (done % 32 == 0) _status.value = "Escaneando 09… $done/$total (${snap.size} adaptaciones)"
+                        if (done % 64 == 0) _status.value = "Escaneando 09… $done/$total (${snap.size} estables, $noise ruido)"
                     }
                 }
                 if (isLight) snapLight = snap else snapDark = snap
                 val detected = if (snapLight != null && snapDark != null) detectSensorDid() else null
                 _diag.value = buildLightDiff(snap, isLight)
                 _status.value = when {
-                    detected != null -> "✓ ¡Sensor detectado! DID $detected. Mueve el slider y aplica."
+                    detected != null -> "✓ ¡Byte detectado! DID $detected (estable, cambia con la luz). Ya puedes ajustarlo."
                     snapLight != null && snapDark != null ->
-                        "Sin candidato claro. Repite con más contraste (sol directo vs sensor tapado)."
-                    else -> "Foto '${if (isLight) "LUZ" else "SOMBRA"}' guardada. Ahora toma la otra."
+                        "Sin candidato claro entre ${snap.size} bytes estables. Repite con MÁS contraste (sol directo vs sensor bien tapado)."
+                    else -> "Foto '${if (isLight) "LUZ" else "SOMBRA"}' guardada (${snap.size} bytes estables, $noise descartados por ruido). Ahora toma la otra."
                 }
             }
             _busy.value = false
@@ -157,36 +165,59 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     /** DID a usar para el sensor: el detectado, o el 02E0 conocido por defecto. */
     private fun sensorDid(): String = _detectedSensorDid.value ?: "02E0"
 
-    /** Convierte un valor hex "31 5B 34 D3" a entero big-endian (o null). */
+    // Nº de bytes del DID detectado (1..4) — para escribir con el ancho correcto.
+    private val _detectedWidth = MutableStateFlow(1)
+    val detectedWidth: StateFlow<Int> = _detectedWidth.asStateFlow()
+    // Valor de referencia con LUZ y con SOMBRA del byte detectado (para guiar el slider).
+    private val _detectedLightVal = MutableStateFlow(0)
+    val detectedLightVal: StateFlow<Int> = _detectedLightVal.asStateFlow()
+    private val _detectedDarkVal = MutableStateFlow(0)
+    val detectedDarkVal: StateFlow<Int> = _detectedDarkVal.asStateFlow()
+
+    /** Convierte un valor hex "31 5B" a entero big-endian (1..4 bytes), o null. */
     private fun hexToBigEndianInt(value: String?): Int? {
         if (value == null) return null
         val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
-        if (bytes.size != 4) return null
+        if (bytes.isEmpty() || bytes.size > 4) return null
         return bytes.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
     }
 
+    private fun byteCount(value: String?): Int =
+        value?.split(" ")?.count { it.isNotBlank() } ?: 0
+
     /**
-     * Compara las dos fotos (luz/sombra) y elige el DID del sensor de luz: el de 4
-     * bytes cuyo valor BAJA más de luz a sombra (la luminosidad es alta con luz y
-     * baja en penumbra). Guarda el DID detectado y precarga el slider con el valor
-     * de LUZ. Devuelve el DID o null si no hay candidato claro.
+     * Compara las dos fotos (luz/sombra) y elige el byte del sensor: el que más cambia
+     * entre luz y sombra, ya filtrado por estabilidad (los ruidos como 02E0 no entran).
+     * Prefiere los de menos bytes (1-2), típicos de un umbral de adaptación. Guarda el
+     * DID, su ancho y los valores de referencia. Devuelve el DID o null.
      */
     private fun detectSensorDid(): String? {
         val light = snapLight ?: return null
         val dark = snapDark ?: return null
         var bestDid: String? = null
-        var bestDrop = 0L
-        var bestLightVal = -1
-        for (did in (light.keys + dark.keys)) {
-            val lv = hexToBigEndianInt(light[did]) ?: continue
-            val dv = hexToBigEndianInt(dark[did]) ?: continue
+        var bestScore = 0.0
+        var bestLightVal = -1; var bestDarkVal = -1; var bestW = 1
+        for (did in (light.keys intersect dark.keys)) {
+            val lStr = light[did]; val dStr = dark[did]
+            val lv = hexToBigEndianInt(lStr) ?: continue
+            val dv = hexToBigEndianInt(dStr) ?: continue
             if (lv == dv) continue
-            // La luminosidad cae al oscurecer: buscamos la mayor caída luz→sombra.
-            val drop = lv.toLong() - dv.toLong()
-            if (drop > bestDrop) { bestDrop = drop; bestDid = did; bestLightVal = lv }
+            val w = byteCount(lStr)
+            // Cambio relativo (normalizado al rango del ancho), con leve preferencia a
+            // bytes angostos (un umbral suele ser 1-2 bytes, no 4 de ruido).
+            val span = ((1L shl (8 * w)) - 1).coerceAtLeast(1)
+            val rel = kotlin.math.abs(lv.toLong() - dv.toLong()).toDouble() / span
+            val score = rel * (5 - w).coerceAtLeast(1)
+            if (score > bestScore) {
+                bestScore = score; bestDid = did
+                bestLightVal = lv; bestDarkVal = dv; bestW = w
+            }
         }
         if (bestDid != null) {
             _detectedSensorDid.value = bestDid
+            _detectedWidth.value = bestW
+            _detectedLightVal.value = bestLightVal
+            _detectedDarkVal.value = bestDarkVal
             _lightSensorValue.value = bestLightVal
         }
         return bestDid
@@ -235,9 +266,13 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val r = repo() ?: return
         if (_busy.value) return
         val mod = VagCatalog.moduleByAddress("09") ?: return
+        val did = _detectedSensorDid.value
+        if (did == null) {
+            _status.value = "Primero detecta el byte real: usa 'Capturar LUZ' y 'Capturar SOMBRA'."
+            return
+        }
         _busy.value = true
-        _status.value = "Leyendo sensor de luz…"
-        val did = sensorDid()
+        _status.value = "Leyendo el byte detectado (DID $did)…"
         viewModelScope.launch {
             withSession(r) {
                 selectModule(r, mod)
@@ -248,9 +283,9 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                     val bytes = value.split(" ").mapNotNull { it.toIntOrNull(16) }
                     val intVal = bytes.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
                     _lightSensorValue.value = intVal
-                    _status.value = "Sensor de luz: 0x${"%08X".format(intVal)} ($intVal lux aprox.)"
+                    _status.value = "DID $did = 0x${"%08X".format(intVal)} ($intVal)"
                 } else {
-                    _status.value = "No se pudo leer el sensor de luz. ${UdsInterpreter.interpret(resp).plain}"
+                    _status.value = "No se pudo leer el DID $did. ${UdsInterpreter.interpret(resp).plain}"
                 }
             }
             _busy.value = false
@@ -317,10 +352,17 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
         val r = repo() ?: return
         if (_busy.value) return
         val mod = VagCatalog.moduleByAddress("09") ?: return
-        val did = sensorDid()
+        val did = _detectedSensorDid.value
+        if (did == null) {
+            _status.value = "Primero detecta el byte real: usa 'Capturar LUZ' y 'Capturar SOMBRA'."
+            return
+        }
+        val width = _detectedWidth.value.coerceIn(1, 4)
         _busy.value = true
-        _status.value = "Aplicando nuevo umbral del sensor de luz (DID $did)…"
-        val log = StringBuilder("ESCRITURA SENSOR DE LUZ · módulo 09 · DID $did\nNuevo valor: 0x${"%08X".format(newValue)} ($newValue)\n")
+        _status.value = "Aplicando valor al byte detectado (DID $did, $width byte/s)…"
+        // Formatea el valor al ANCHO real del DID detectado (1-4 bytes), big-endian.
+        val b = (0 until width).joinToString(" ") { i -> "%02X".format((newValue shr (8 * (width - 1 - i))) and 0xFF) }
+        val log = StringBuilder("ESCRITURA · módulo 09 · DID $did ($width bytes)\nNuevo valor: $b ($newValue)\n")
         viewModelScope.launch {
             withSession(r) {
                 suspend fun send(cmd: String): String {
@@ -331,19 +373,19 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
                 selectModule(r, mod)
                 send("10 03")
                 val sec = attemptSecurityAccessLogged(r, mod, ::send)
-                val b = (0..3).map { i -> "%02X".format((newValue shr (24 - i * 8)) and 0xFF) }.joinToString(" ")
                 val writeResp = send("2E $did $b")
                 val result = UdsInterpreter.interpret(writeResp, "2E")
-                _status.value = if (result.ok) {
-                    _lightSensorValue.value = newValue
-                    "✓ Umbral del sensor de luz actualizado. Reinicia el contacto para que el módulo adopte el valor."
-                } else {
-                    val hint = if (writeResp.uppercase().replace(Regex("[^0-9A-F]"), "").contains("7F2E31"))
-                        "\n\n⚠ El DID $did rechaza la escritura por 'fuera de rango'. Eso suele significar " +
-                            "que ese DID es la MEDICIÓN VIVA del sensor (solo lectura), no el umbral. Usa " +
-                            "'Capturar LUZ' y 'Capturar SOMBRA' para que la app encuentre el DID correcto del umbral."
-                    else ""
-                    "No se pudo escribir el umbral: ${result.plain}$sec$hint"
+                val clean = writeResp.uppercase().replace(Regex("[^0-9A-F]"), "")
+                _status.value = when {
+                    result.ok -> {
+                        _lightSensorValue.value = newValue
+                        "✓ ¡Escrito! DID $did = $b. Apaga y prende el contacto para que el módulo lo adopte."
+                    }
+                    clean.contains("7F2E33") || clean.contains("7F2E35") ->
+                        "🔒 El módulo exige acceso de seguridad (SFD) para escribir este byte. ${result.plain}$sec"
+                    clean.contains("7F2E31") ->
+                        "El DID $did rechazó el valor (fuera de rango). Prueba otro valor o re-detecta con más contraste.${sec}"
+                    else -> "No se pudo escribir: ${result.plain}$sec"
                 }
                 _diag.value = log.toString()
             }

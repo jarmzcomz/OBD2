@@ -56,6 +56,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -379,9 +381,17 @@ private fun VagTab(vm: VagViewModel) {
     val sa2Bytecode by vm.sa2Bytecode.collectAsState()
     val diag by vm.diag.collectAsState()
     val detectedSensorDid by vm.detectedSensorDid.collectAsState()
+    val detectedWidth by vm.detectedWidth.collectAsState()
+    val detectedLightVal by vm.detectedLightVal.collectAsState()
+    val detectedDarkVal by vm.detectedDarkVal.collectAsState()
     val monitoring by vm.monitoring.collectAsState()
     val lightHistory by vm.lightHistory.collectAsState()
     val clipboard = LocalClipboardManager.current
+    // Slider del byte detectado. Se reinicia al valor LUZ cuando se detecta un byte.
+    var sliderValue by rememberSaveable { mutableStateOf(0f) }
+    androidx.compose.runtime.LaunchedEffect(detectedSensorDid) {
+        if (detectedSensorDid != null) sliderValue = detectedLightVal.toFloat()
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -487,11 +497,36 @@ private fun VagTab(vm: VagViewModel) {
                     PillButton("☀ Capturar LUZ", Modifier.weight(1f), enabled = !busy) { vm.captureLightSnapshot(true) }
                     PillButton("🌑 Capturar SOMBRA", Modifier.weight(1f), bg = Color(0xFF24344A), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.captureLightSnapshot(false) }
                 }
-                if (detectedSensorDid != null) {
+                detectedSensorDid?.let { did ->
                     Spacer(Modifier.height(8.dp))
                     Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF14331F), RoundedCornerShape(8.dp)).padding(10.dp)) {
-                        Text("Candidato: DID $detectedSensorDid (por verificar)", color = Color(0xFF6EE7A0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text("✓ Byte detectado: DID $did · $detectedWidth byte/s · LUZ=$detectedLightVal · SOMBRA=$detectedDarkVal",
+                            color = Color(0xFF6EE7A0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
+                    // Ajuste del byte detectado (con su ancho real).
+                    val maxVal = ((1L shl (8 * detectedWidth.coerceIn(1, 4))) - 1).toFloat()
+                    Spacer(Modifier.height(10.dp))
+                    Text("Ajustar el valor de DID $did", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Valor a escribir: ${sliderValue.toInt()}  (0x${"%X".format(sliderValue.toInt())})",
+                        color = Color(0xFFFBD44A), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Slider(
+                        value = sliderValue.coerceIn(0f, maxVal),
+                        onValueChange = { sliderValue = it },
+                        valueRange = 0f..maxVal,
+                        colors = SliderDefaults.colors(thumbColor = Color(0xFFFBD44A), activeTrackColor = Color(0xFFFBD44A), inactiveTrackColor = Color(0xFF24344A))
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PillButton("Leer", Modifier.weight(1f), enabled = !busy) { vm.readLightSensor() }
+                        PillButton("Aplicar", Modifier.weight(1f), bg = Color(0xFF7A5C00), fg = Color(0xFFFBD44A), enabled = !busy) {
+                            vm.writeLightSensorThreshold(sliderValue.toInt())
+                        }
+                        PillButton("LUZ", Modifier.weight(1f), bg = Color(0xFF24344A), fg = Color(0xFF9FB3C8), enabled = !busy) {
+                            sliderValue = detectedLightVal.toFloat()
+                        }
+                    }
+                    Text("Sugerencia: para que NO encienda luces de día, prueba un valor cercano a SOMBRA ($detectedDarkVal).",
+                        color = Color(0xFF7C8AA5), fontSize = 9.sp)
                 }
                 Spacer(Modifier.height(6.dp))
                 Text("Borrar capturas", color = Color(0xFF7C8AA5), fontSize = 10.sp,

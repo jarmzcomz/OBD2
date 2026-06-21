@@ -12,8 +12,8 @@ android {
         applicationId = "com.autodiag"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "3.0-pro"
+        versionCode = 13
+        versionName = "3.1-pro"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
