@@ -7,6 +7,7 @@ import com.autodiag.AutoDiagApplication
 import com.autodiag.data.Mode09Decoder
 import com.autodiag.data.Sa2SeedKey
 import com.autodiag.data.UdsInterpreter
+import com.autodiag.data.UdsSecurity
 import com.autodiag.data.VagCatalog
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,22 +82,12 @@ class VagViewModel(application: Application) : AndroidViewModel(application) {
     fun setSa2Bytecode(code: String) { _sa2Bytecode.value = code.trim() }
 
     /**
-     * Calcula la clave para una [seedBytes] dada y un [login] estático. Si hay
-     * bytecode SA2 pegado, ejecuta la VM SA2 (algoritmo real MQB) sobre la semilla;
-     * si no, cae al método legacy (login en big-endian con el ancho de la semilla).
-     * Devuelve la clave como string hex "AA BB CC DD".
+     * Calcula la clave para una [seedBytes] dada y un [login] estático, delegando en
+     * [UdsSecurity.computeKey] — la MISMA lógica cubierta por los tests e2e. Usa el
+     * bytecode SA2 pegado si lo hay; si no, el login estático en big-endian.
      */
-    private fun computeKey(seedBytes: List<Int>, login: Int): String {
-        val bc = Sa2SeedKey.parseBytecode(_sa2Bytecode.value)
-        if (bc != null) {
-            val key = Sa2SeedKey(bc).execute(seedBytes)
-            return (0..3).joinToString(" ") { i -> "%02X".format(((key shr (24 - i * 8)) and 0xFF).toInt()) }
-        }
-        val width = seedBytes.size.coerceIn(2, 4)
-        return (0 until width).joinToString(" ") { i ->
-            "%02X".format((login shr (8 * (width - 1 - i))) and 0xFF)
-        }
-    }
+    private fun computeKey(seedBytes: List<Int>, login: Int): String =
+        UdsSecurity.computeKey(seedBytes, login, _sa2Bytecode.value)
 
     // Dos "fotos" de las adaptaciones del módulo 09, tomadas con luz y con sombra,
     // para encontrar el DID del sensor de luz por diferencia.

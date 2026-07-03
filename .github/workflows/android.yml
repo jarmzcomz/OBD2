@@ -61,6 +61,11 @@ jobs:
             git push origin HEAD:${GITHUB_REF_NAME}
           fi
 
+      # Corre los tests unitarios (incluye el e2e de acceso de seguridad
+      # semilla→clave→escritura y los vectores SA2). Si fallan, no se publica APK.
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
