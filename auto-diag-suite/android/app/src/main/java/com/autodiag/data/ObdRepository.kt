@@ -15,11 +15,18 @@ interface ObdRepository {
 
     /**
      * Envía un comando crudo (AT u OBD) y devuelve la respuesta del adaptador.
-     * Base del terminal de ingeniero y de las consultas avanzadas (VIN, freeze
-     * frame, modos 07/0A, etc.). Implementación por defecto vacía para repos que
-     * no lo soporten (p.ej. WebSocket puro).
      */
     suspend fun sendRaw(command: String): String = ""
+
+    /**
+     * Marca el inicio de una sesión manual (VIN, UDS, sensor...). Mientras haya
+     * una sesión activa, el liveData pausa para no corromper el contexto del ELM.
+     * SIEMPRE llamar [endSession] en un bloque finally.
+     */
+    fun beginSession() {}
+
+    /** Marca el fin de una sesión manual y reanuda el liveData. */
+    fun endSession() {}
 
     /** Capacidades opcionales que la UI usa para mostrar/ocultar paneles. */
     val capabilities: ObdCapabilities get() = ObdCapabilities()

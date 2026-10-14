@@ -62,7 +62,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -378,14 +378,19 @@ private fun VagTab(vm: VagViewModel) {
     val status by vm.status.collectAsState()
     val busy by vm.busy.collectAsState()
     val securityCode by vm.securityCode.collectAsState()
+    val sa2Bytecode by vm.sa2Bytecode.collectAsState()
     val diag by vm.diag.collectAsState()
-    val lightSensorValue by vm.lightSensorValue.collectAsState()
+    val detectedSensorDid by vm.detectedSensorDid.collectAsState()
+    val detectedWidth by vm.detectedWidth.collectAsState()
+    val detectedLightVal by vm.detectedLightVal.collectAsState()
+    val detectedDarkVal by vm.detectedDarkVal.collectAsState()
+    val monitoring by vm.monitoring.collectAsState()
+    val lightHistory by vm.lightHistory.collectAsState()
     val clipboard = LocalClipboardManager.current
-    // Valor del slider (se inicializa del valor leído del auto).
+    // Slider del byte detectado. Se reinicia al valor LUZ cuando se detecta un byte.
     var sliderValue by rememberSaveable { mutableStateOf(0f) }
-    // Sincroniza el slider cuando llega el valor del auto.
-    androidx.compose.runtime.LaunchedEffect(lightSensorValue) {
-        if (lightSensorValue >= 0) sliderValue = lightSensorValue.toFloat()
+    androidx.compose.runtime.LaunchedEffect(detectedSensorDid) {
+        if (detectedSensorDid != null) sliderValue = detectedLightVal.toFloat()
     }
 
     LazyColumn(
@@ -393,7 +398,7 @@ private fun VagTab(vm: VagViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        // Barra de estado en texto plano.
+        // Barra de estado.
         item {
             Row(
                 modifier = Modifier.fillMaxWidth()
@@ -410,33 +415,15 @@ private fun VagTab(vm: VagViewModel) {
             }
         }
 
-        // Panel de diagnóstico crudo (hex). Aparece tras un intento de cambio para
-        // que el usuario lo copie y lo comparta — así se afina sin adivinar.
+        // Diagnóstico crudo (hex) — aparece tras una operación, para copiar/compartir.
         if (diag.isNotBlank()) {
             item {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                        .background(Color(0xFF0E1626), RoundedCornerShape(12.dp))
-                        .border(1.dp, Color(0xFF2A3a52), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
-                ) {
-                    Text("🔎 Diagnóstico (compártelo para afinar)", color = Color(0xFF93B4E8),
-                        fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(diag, color = Color(0xFF9FB3C8), fontSize = 11.sp,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                    Spacer(modifier = Modifier.height(8.dp))
+                VagCard("🔎 Diagnóstico", Color(0xFF93B4E8), bg = Color(0xFF0E1626), border = Color(0xFF2A3A52)) {
+                    Text(diag, color = Color(0xFF9FB3C8), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier.background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
-                                .clickable { clipboard.setText(AnnotatedString(diag)) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) { Text("Copiar", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
-                        Box(
-                            modifier = Modifier.background(Color(0xFF1A2438), RoundedCornerShape(8.dp))
-                                .clickable { vm.clearDiag() }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) { Text("Ocultar", color = Color(0xFF7C8AA5), fontSize = 12.sp) }
+                        PillButton("Copiar", Modifier.weight(1f)) { clipboard.setText(AnnotatedString(diag)) }
+                        PillButton("Ocultar", Modifier.weight(1f), bg = Color(0xFF1A2438), fg = Color(0xFF7C8AA5)) { vm.clearDiag() }
                     }
                 }
             }
@@ -458,188 +445,254 @@ private fun VagTab(vm: VagViewModel) {
             }
         }
 
-        // Resultado del escaneo de módulos.
+        // Módulos encontrados.
         if (modules.isNotEmpty()) {
             item { SectionTitle("Módulos encontrados") }
             items(modules, key = { it.address }) { m -> ModuleRow(m) }
         }
 
-        // Interruptores de funciones.
+        // ───────── Sensor de luz (diagnóstico honesto) ─────────
         item {
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Funciones (interruptores)", color = Color(0xFFE5EAF2), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier.background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
-                        .clickable(enabled = !busy) { vm.loadFeatures() }.padding(horizontal = 12.dp, vertical = 8.dp)
-                ) { Text("Leer estado", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
-            }
-        }
-        item {
-            Text(
-                "⚠ Funciones para VW T-Cross (MQB A0). La app lee el estado real antes de " +
-                    "cambiar nada. Si tu módulo no la soporta o pide acceso de seguridad, el " +
-                    "interruptor te lo dirá en texto en vez de fallar a ciegas.",
-                color = Color(0xFFF59E0B), fontSize = 11.sp
-            )
-        }
-        // Volcado de codificación (solo lectura) para mapear con datos reales.
-        item {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text("🔍 Leer codificación real (solo lectura, sin riesgo)", color = Color(0xFF93B4E8),
-                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier.weight(1f).background(Color(0xFF142235), RoundedCornerShape(8.dp))
-                            .clickable(enabled = !busy) { vm.dumpCoding("09") }.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) { Text("Volcar 09 (luces/confort)", color = Color(0xFF9FB3C8), fontSize = 11.sp) }
-                    Box(
-                        modifier = Modifier.weight(1f).background(Color(0xFF142235), RoundedCornerShape(8.dp))
-                            .clickable(enabled = !busy) { vm.dumpCoding("17") }.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) { Text("Volcar 17 (tablero)", color = Color(0xFF9FB3C8), fontSize = 11.sp) }
+            VagCard(
+                "💡 Sensor de luz (diagnóstico)", Color(0xFFFBD44A),
+                bg = Color(0xFF0F1E2D), border = Color(0xFF1E4060),
+                help = "Hallazgo confirmado en TU auto: el DID 02E0 NO es el sensor de luz — su valor " +
+                    "salta al azar por todo el rango aunque el carro esté quieto. Y el umbral verdadero " +
+                    "vive en el módulo 09, bloqueado por SFD (escribir exige token online de VW). Por eso " +
+                    "el ajuste del sensor no se puede hacer por DIY. El camino real es un taller con " +
+                    "ODIS/acceso online — usa el botón 'Informe para el taller' de abajo."
+            ) {
+                // Monitor crudo de 02E0 (no es el sensor; queda solo como diagnóstico).
+                Text("📈 Monitor del DID 02E0 (crudo)", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(2.dp))
+                Text("Solo diagnóstico: este valor cambia en cada lectura, lo que CONFIRMA que no es la " +
+                    "luz del sensor. Sirve únicamente para ver el comportamiento crudo del módulo.",
+                    color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                Spacer(Modifier.height(8.dp))
+                PillButton(
+                    if (monitoring) "⏸ Detener monitor" else "▶ Iniciar monitor (crudo)",
+                    Modifier.fillMaxWidth(),
+                    bg = if (monitoring) Color(0xFF4B1F1F) else Color(0xFF12333A),
+                    fg = if (monitoring) Color(0xFFF0A0A0) else Color(0xFF7FD0E0),
+                    enabled = !busy
+                ) { vm.toggleLightMonitor() }
+                if (lightHistory.size >= 2) {
+                    val mn = lightHistory.min(); val mx = lightHistory.max()
+                    Spacer(Modifier.height(8.dp))
+                    LineChart(values = lightHistory.map { it.toFloat() }, min = mn.toFloat(), max = mx.coerceAtLeast(mn + 1).toFloat())
+                    Spacer(Modifier.height(4.dp))
+                    Text("ahora 0x${"%08X".format(lightHistory.last())}", color = Color(0xFF7FD0E0), fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Para el sensor de luz, vuelca el 09 y compártelo: ahí está el umbral a ajustar.",
-                    color = Color(0xFF7C8AA5), fontSize = 10.sp)
-            }
-        }
-        // Buscador del sensor de luz por diferencia (luz vs sombra).
-        item {
-            Column(modifier = Modifier.fillMaxWidth()
-                .background(Color(0xFF12202E), RoundedCornerShape(12.dp))
-                .border(1.dp, Color(0xFF24405A), RoundedCornerShape(12.dp))
-                .padding(12.dp)) {
-                Text("🌗 Buscar el sensor de luz (para tu polarizado)", color = Color(0xFF7FD0E0),
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("1) A plena luz toca 'Capturar LUZ'.  2) Tapa el sensor (o en sombra) y toca " +
-                    "'Capturar SOMBRA'.  La app marca el dato que cambió: ese es el sensor.",
-                    color = Color(0xFF9FB3C8), fontSize = 10.sp)
-                Spacer(modifier = Modifier.height(8.dp))
+
+                Spacer(Modifier.height(14.dp))
+                // Búsqueda experimental del byte real por diferencia luz/sombra.
+                Text("🔬 Buscar el byte real (experimental)", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(2.dp))
+                Text("A pleno sol toca LUZ; tapa el sensor y toca SOMBRA. Compara adaptaciones para buscar " +
+                    "el byte que cambia con la luz (aunque escribirlo siga requiriendo desbloqueo SFD).",
+                    color = Color(0xFF7C8AA5), fontSize = 9.sp)
+                Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier.weight(1f).background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
-                            .clickable(enabled = !busy) { vm.captureLightSnapshot(true) }.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) { Text("☀ Capturar LUZ", color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
-                    Box(
-                        modifier = Modifier.weight(1f).background(Color(0xFF24344A), RoundedCornerShape(8.dp))
-                            .clickable(enabled = !busy) { vm.captureLightSnapshot(false) }.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) { Text("🌑 Capturar SOMBRA", color = Color(0xFF9FB3C8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    PillButton("☀ Capturar LUZ", Modifier.weight(1f), enabled = !busy) { vm.captureLightSnapshot(true) }
+                    PillButton("🌑 Capturar SOMBRA", Modifier.weight(1f), bg = Color(0xFF24344A), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.captureLightSnapshot(false) }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier.background(Color(0xFF1A2438), RoundedCornerShape(8.dp))
-                        .clickable(enabled = !busy) { vm.resetLightSnapshots() }.padding(horizontal = 12.dp, vertical = 6.dp)
-                ) { Text("Borrar capturas", color = Color(0xFF7C8AA5), fontSize = 10.sp) }
-            }
-        }
-        // Ajustador de umbral del sensor de luz (DID 02E0 módulo 09).
-        item {
-            Column(modifier = Modifier.fillMaxWidth()
-                .background(Color(0xFF0F1E2D), RoundedCornerShape(12.dp))
-                .border(1.dp, Color(0xFF1E4060), RoundedCornerShape(12.dp))
-                .padding(12.dp)) {
-                Text("💡 Ajustar umbral del sensor de luz", color = Color(0xFFFBD44A),
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Para compensar tu polarizado oscuro. Baja el valor si el auto siempre cree " +
-                    "que está oscuro (enciende luces de día). 'Leer actual' lee el valor de tu T-Cross ahora.",
-                    color = Color(0xFF9FB3C8), fontSize = 10.sp)
-                Spacer(modifier = Modifier.height(10.dp))
-                // Valor actual leído vs slider.
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Valor actual del auto:", color = Color(0xFF7C8AA5), fontSize = 11.sp)
-                    Text(
-                        if (lightSensorValue < 0) "—  (toca Leer actual)" else "0x${"%08X".format(lightSensorValue)}",
-                        color = Color(0xFF93B4E8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold
+                detectedSensorDid?.let { did ->
+                    Spacer(Modifier.height(8.dp))
+                    Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF14331F), RoundedCornerShape(8.dp)).padding(10.dp)) {
+                        Text("✓ Byte detectado: DID $did · $detectedWidth byte/s · LUZ=$detectedLightVal · SOMBRA=$detectedDarkVal",
+                            color = Color(0xFF6EE7A0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    // Ajuste del byte detectado (con su ancho real).
+                    val maxVal = ((1L shl (8 * detectedWidth.coerceIn(1, 4))) - 1).toFloat()
+                    Spacer(Modifier.height(10.dp))
+                    Text("Ajustar el valor de DID $did", color = Color(0xFF7FD0E0), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Valor a escribir: ${sliderValue.toInt()}  (0x${"%X".format(sliderValue.toInt())})",
+                        color = Color(0xFFFBD44A), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Slider(
+                        value = sliderValue.coerceIn(0f, maxVal),
+                        onValueChange = { sliderValue = it },
+                        valueRange = 0f..maxVal,
+                        colors = SliderDefaults.colors(thumbColor = Color(0xFFFBD44A), activeTrackColor = Color(0xFFFBD44A), inactiveTrackColor = Color(0xFF24344A))
                     )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PillButton("Leer", Modifier.weight(1f), enabled = !busy) { vm.readLightSensor() }
+                        PillButton("Aplicar", Modifier.weight(1f), bg = Color(0xFF7A5C00), fg = Color(0xFFFBD44A), enabled = !busy) {
+                            vm.writeLightSensorThreshold(sliderValue.toInt())
+                        }
+                        PillButton("LUZ", Modifier.weight(1f), bg = Color(0xFF24344A), fg = Color(0xFF9FB3C8), enabled = !busy) {
+                            sliderValue = detectedLightVal.toFloat()
+                        }
+                    }
+                    Text("Sugerencia: para que NO encienda luces de día, prueba un valor cercano a SOMBRA ($detectedDarkVal).",
+                        color = Color(0xFF7C8AA5), fontSize = 9.sp)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Valor a escribir:", color = Color(0xFF7C8AA5), fontSize = 11.sp)
-                    Text("0x${"%08X".format(sliderValue.toInt())}  (${sliderValue.toInt()})",
-                        color = Color(0xFFFBD44A), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("Borrar capturas", color = Color(0xFF7C8AA5), fontSize = 10.sp,
+                    modifier = Modifier.clickable(enabled = !busy) { vm.resetLightSnapshots() }.padding(vertical = 2.dp))
+            }
+        }
+
+        // ───────── Informe para el taller ─────────
+        item {
+            VagCard(
+                "📋 Informe para el taller", Color(0xFF93B4E8),
+                bg = Color(0xFF12202E), border = Color(0xFF24405A),
+                help = "Genera un resumen con tus módulos, números de pieza, software y exactamente qué " +
+                    "pedirle al técnico (ajustar la sensibilidad de luz del módulo 09, protegido por SFD). " +
+                    "Cópialo y mándaselo: le ahorra tiempo y a ti dinero."
+            ) {
+                PillButton("Generar informe", Modifier.fillMaxWidth(), bg = Color(0xFF1E3A5F), enabled = !busy) { vm.generateWorkshopReport() }
+                Spacer(Modifier.height(6.dp))
+                Text("Aparece arriba en el panel 'Diagnóstico' para copiar/compartir.", color = Color(0xFF7C8AA5), fontSize = 9.sp)
+            }
+        }
+
+        // ───────── Funciones ocultas (interruptores) ─────────
+        item {
+            VagCard(
+                "🎛 Funciones ocultas", Color(0xFFE5EAF2),
+                help = "Funciones del VW T-Cross (MQB A0). La app lee el estado real antes de cambiar " +
+                    "nada — toca 'Leer estado'. Si un módulo no la soporta o pide acceso de seguridad, " +
+                    "el interruptor lo dice en texto en vez de fallar en silencio.",
+                trailing = {
+                    PillButton("Leer estado", enabled = !busy) { vm.loadFeatures() }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                // El rango del slider: 0 (siempre considera luz) a 0x3FFFFFFF (~máx que vimos).
-                // El valor LUZ de tu auto fue 0x315B34D3, la SOMBRA 0x0A27E547.
-                // Para compensar polarizado: bajar el umbral hacia la zona LUZ pero un poco más bajo.
-                Slider(
-                    value = sliderValue,
-                    onValueChange = { sliderValue = it },
-                    valueRange = 0f..0x40000000.toFloat(),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    PillButton("Confort 09", Modifier.weight(1f), bg = Color(0xFF142235), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.dumpCoding("09") }
+                    PillButton("Tablero 17", Modifier.weight(1f), bg = Color(0xFF142235), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.dumpCoding("17") }
+                    PillButton("Gateway 19", Modifier.weight(1f), bg = Color(0xFF142235), fg = Color(0xFF9FB3C8), enabled = !busy) { vm.dumpCoding("19") }
+                }
+                Spacer(Modifier.height(10.dp))
+                if (features.isEmpty()) {
+                    Text("Toca 'Leer estado' para ver qué funciones tiene tu auto.", color = Color(0xFF7C8AA5), fontSize = 12.sp)
+                } else {
+                    features.forEach { fs ->
+                        FeatureRow(fs, busy, vm)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+
+        // ───────── Acceso de seguridad (código + SA2 + probar) ─────────
+        item {
+            VagCard(
+                "🔐 Acceso de seguridad", Color(0xFF6EE7A0),
+                bg = Color(0xFF0E1B14), border = Color(0xFF1F4030),
+                help = "Para escribir codificación, el módulo pide una clave. La app prueba los " +
+                    "niveles del MQB (03 = codificación, luego 01/05/07) con los logins estáticos " +
+                    "(09→31347, 17→47115, 19→20103), un solo intento para no bloquear. Para la clave " +
+                    "REAL pega el bytecode SA2 de tu módulo (ver guía). Si tu T-Cross tiene SFD " +
+                    "(post-2021), escribir exige token online de VW; leer siempre funciona."
+            ) {
+                OutlinedTextField(
+                    value = securityCode,
+                    onValueChange = { vm.setSecurityCode(it) },
+                    label = { Text("Código de seguridad (opcional)", fontSize = 12.sp) },
+                    placeholder = { Text("Ej. 31347 — vacío usa el conocido", fontSize = 12.sp) },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFFFBD44A),
-                        activeTrackColor = Color(0xFFFBD44A),
-                        inactiveTrackColor = Color(0xFF24344A)
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFFE5EAF2), unfocusedTextColor = Color(0xFFE5EAF2),
+                        focusedBorderColor = Color(0xFF2563EB), unfocusedBorderColor = Color(0xFF1E2A3D),
+                        focusedLabelColor = Color(0xFF93B4E8), unfocusedLabelColor = Color(0xFF7C8AA5)
                     )
                 )
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("0 (siempre día)", color = Color(0xFF7C8AA5), fontSize = 9.sp)
-                    Text("Oscuro máx", color = Color(0xFF7C8AA5), fontSize = 9.sp)
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        modifier = Modifier.background(Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
-                            .clickable(enabled = !busy) { vm.readLightSensor() }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) { Text("Leer actual", color = Color(0xFF93B4E8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
-                    Box(
-                        modifier = Modifier.background(Color(0xFF7A5C00), RoundedCornerShape(8.dp))
-                            .clickable(enabled = !busy && lightSensorValue >= 0) {
-                                vm.writeLightSensorThreshold(sliderValue.toInt())
-                            }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) { Text("Aplicar umbral", color = Color(0xFFFBD44A), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text("⚠ Después de aplicar, apaga y prende el contacto para que el módulo adopte el nuevo valor.",
-                    color = Color(0xFFF59E0B), fontSize = 10.sp)
-            }
-        }
-        // Campo opcional para pegar el código/llave de seguridad.
-        item {
-            OutlinedTextField(
-                value = securityCode,
-                onValueChange = { vm.setSecurityCode(it) },
-                label = { Text("Código de seguridad (opcional, anula el de fábrica)", fontSize = 12.sp) },
-                placeholder = { Text("Ej. 31347 — déjalo vacío para usar el conocido", fontSize = 12.sp) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color(0xFFE5EAF2),
-                    unfocusedTextColor = Color(0xFFE5EAF2),
-                    focusedBorderColor = Color(0xFF2563EB),
-                    unfocusedBorderColor = Color(0xFF1E2A3D),
-                    focusedLabelColor = Color(0xFF93B4E8),
-                    unfocusedLabelColor = Color(0xFF7C8AA5)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = sa2Bytecode,
+                    onValueChange = { vm.setSa2Bytecode(it) },
+                    label = { Text("🧬 Bytecode SA2 (clave real, opcional)", fontSize = 12.sp) },
+                    placeholder = { Text("68 03 81 93 54 41 4A 49 …", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFFE5EAF2), unfocusedTextColor = Color(0xFFE5EAF2),
+                        focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color(0xFF1E2A3D),
+                        focusedLabelColor = Color(0xFF6EE7A0), unfocusedLabelColor = Color(0xFF7C8AA5)
+                    )
                 )
-            )
-        }
-        item {
-            Text(
-                "La app ya trae los logins conocidos del MQB (módulo 09 → 31347, etc.) e intenta " +
-                    "el acceso una sola vez (sin reintentos, para no bloquear el módulo). Nota: muchos " +
-                    "ELM327 económicos fallan al ESCRIBIR en estos autos, y si tu T-Cross trae SFD, la " +
-                    "escritura requiere desbloqueo online de VW. Leer siempre funciona.",
-                color = Color(0xFF7C8AA5), fontSize = 10.sp
-            )
-        }
-        if (features.isEmpty()) {
-            item {
-                Text("Toca \"Leer estado\" para ver qué funciones tiene tu auto.", color = Color(0xFF7C8AA5), fontSize = 13.sp)
+                Spacer(Modifier.height(12.dp))
+                Text("Probar cálculo de clave (sin escribir):", color = Color(0xFF9FB3C8), fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    for (addr in listOf("09", "17", "19")) {
+                        PillButton("Módulo $addr", Modifier.weight(1f), enabled = !busy) { vm.testSecurityAccess(addr) }
+                    }
+                }
             }
-        } else {
-            items(features, key = { it.feature.id }) { fs -> FeatureRow(fs, busy, vm) }
         }
+
         item { Spacer(modifier = Modifier.height(16.dp)) }
+    }
+}
+
+/** Botón "pastilla" reutilizable: reemplaza el patrón Box+clickable repetido. */
+@Composable
+private fun PillButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    bg: Color = Color(0xFF1E3A5F),
+    fg: Color = Color(0xFF93B4E8),
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .background(if (enabled) bg else Color(0xFF18222F), RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            color = if (enabled) fg else Color(0xFF55627A),
+            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * Tarjeta de sección VAG con título, ayuda colapsable (ⓘ) y contenido. Mantener el
+ * texto explicativo dentro de [help] evita los muros de texto: el usuario lo abre
+ * solo si lo necesita.
+ */
+@Composable
+private fun VagCard(
+    title: String,
+    accent: Color,
+    help: String? = null,
+    bg: Color = Color(0xFF0F1A28),
+    border: Color = Color(0xFF1E2A3D),
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    var showHelp by rememberSaveable(title) { mutableStateOf(false) }
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .background(bg, RoundedCornerShape(14.dp))
+            .border(1.dp, border, RoundedCornerShape(14.dp))
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (help != null) {
+                Text(
+                    if (showHelp) "✕" else "ⓘ",
+                    color = Color(0xFF7C8AA5), fontSize = 14.sp,
+                    modifier = Modifier.clickable { showHelp = !showHelp }.padding(horizontal = 6.dp)
+                )
+            }
+            trailing?.invoke()
+        }
+        if (help != null && showHelp) {
+            Spacer(Modifier.height(6.dp))
+            Text(help, color = Color(0xFF8597AD), fontSize = 10.sp, lineHeight = 14.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        content()
     }
 }
 

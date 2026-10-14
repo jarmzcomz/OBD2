@@ -30,7 +30,10 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        # v4.0.2+ corrige el fallo "Failed to find package 'tools'": Google
+        # eliminó el paquete 'tools' del SDK y las versiones v3 aún intentaban
+        # instalarlo, rompiendo TODOS los builds. v4.0.4 es la última estable.
+        uses: android-actions/setup-android@v4.0.4
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -40,6 +43,31 @@ jobs:
           if [ ! -f gradlew ]; then
             gradle wrapper --gradle-version 8.7
           fi
+
+      # Crea UNA SOLA VEZ un keystore de firma estable y lo guarda en el repo.
+      # Sin esto, cada build del CI firma el APK con un debug.keystore distinto y
+      # Android obliga a DESINSTALAR para actualizar. Usa las credenciales públicas
+      # de debug ("android"): no es un secreto, solo garantiza firma consistente.
+      # El commit lleva [skip ci] para no disparar otro build en bucle.
+      - name: Ensure stable signing keystore
+        run: |
+          KS=app/autodiag.keystore
+          if [ ! -f "$KS" ]; then
+            keytool -genkeypair -v -keystore "$KS" \
+              -storepass android -keypass android \
+              -alias autodiag -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=AutoDiag, OU=Dev, O=AutoDiag, L=NA, ST=NA, C=NA"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -f "$KS"
+            git commit -m "ci: keystore de firma estable para actualizaciones in-place [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+
+      # Corre los tests unitarios (incluye el e2e de acceso de seguridad
+      # semilla→clave→escritura y los vectores SA2). Si fallan, no se publica APK.
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace

@@ -12,8 +12,8 @@ android {
         applicationId = "com.autodiag"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0-pro"
+        versionCode = 15
+        versionName = "3.3-pro"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -21,9 +21,29 @@ android {
         }
     }
 
+    // Llave de firma ESTABLE (no el debug.keystore aleatorio que el CI regenera en
+    // cada build). Con una misma llave en todos los APK, Android permite ACTUALIZAR
+    // encima sin tener que desinstalar. El keystore lo crea/commitea el CI una vez
+    // (credenciales públicas de debug "android"); no es un secreto real.
+    val stableKeystore = rootProject.file("app/autodiag.keystore")
+    signingConfigs {
+        create("stable") {
+            storeFile = stableKeystore
+            storePassword = "android"
+            keyAlias = "autodiag"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            // Solo aplica la firma estable si el keystore ya existe en el repo;
+            // si no, Gradle usa el debug.keystore por defecto (build local sin CI).
+            if (stableKeystore.exists()) signingConfig = signingConfigs.getByName("stable")
+        }
         release {
             isMinifyEnabled = false
+            if (stableKeystore.exists()) signingConfig = signingConfigs.getByName("stable")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -48,7 +68,7 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
 
     implementation("androidx.compose.ui:ui")
@@ -59,18 +79,18 @@ dependencies {
 
     // Material Components y AppCompat para temas estables
     implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
 
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
-    implementation("androidx.activity:activity-compose:1.9.1")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.navigation:navigation-compose:2.8.5")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

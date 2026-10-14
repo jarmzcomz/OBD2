@@ -68,6 +68,7 @@ class DemoRepository : ObdRepository {
             cmd == "1003" || cmd == "1002" -> "50 03 00 32 01 F4" // sesión abierta
             cmd.startsWith("22F197") -> "62 F197 44 45 4D 4F 2D 45 43 55" // "DEMO-ECU" en ASCII
             cmd.startsWith("220600") -> "62 06 00 1F 0A 14 28 50 A0"      // bloque de codificación demo
+            cmd.startsWith("2202E0") -> "62 02 E0 31 5B 34 D3"            // sensor de luz demo (valor "luz")
             cmd.startsWith("2E0600") -> "6E 06 00"                        // escritura aceptada
             cmd.startsWith("2701") -> "67 01 12 34 56 78"                 // semilla demo
             cmd.startsWith("2702") -> "67 02"                             // llave aceptada
