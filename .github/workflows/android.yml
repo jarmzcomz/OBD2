@@ -30,7 +30,10 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        # v4.0.2+ corrige el fallo "Failed to find package 'tools'": Google
+        # eliminó el paquete 'tools' del SDK y las versiones v3 aún intentaban
+        # instalarlo, rompiendo TODOS los builds. v4.0.4 es la última estable.
+        uses: android-actions/setup-android@v4.0.4
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
