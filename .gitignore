@@ -1,0 +1,21 @@
+# Caché de herramientas de análisis (no debe versionarse)
+graphify-out/
+.graphify*
+
+# Temporales / sistema
+.DS_Store
+*.log
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Gradle / Android (respaldo; android/ tiene su propio .gitignore)
+.gradle/
+**/build/
+local.properties
